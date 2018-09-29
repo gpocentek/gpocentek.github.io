@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Creating a bootable image disk from an iso file | gpocentek's webspace</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="keywords" content="" />
+    <meta name="author" content="Gauvain Pocentek" />
+    <meta name="kittycheck_rumble" content="true" />
+    <meta name="kittycheck_position" content="top=60,right=60" />
+
+    <!-- Le styles -->
+    <link rel="stylesheet" href="../../theme/css/bootstrap.min.css" type="text/css" />
+    <style type="text/css">
+      body {
+        padding-top: 60px;
+        padding-bottom: 40px;
+      }
+      .sidebar-nav {
+        padding: 9px 0;
+      }
+      .tag-1 {
+        font-size: 13pt;
+      }
+      .tag-2 {
+        font-size: 10pt;
+      }
+      .tag-2 {
+        font-size: 8pt;
+      }
+      .tag-4 {
+        font-size: 6pt;
+     }
+    </style>
+    <link href="../../theme/css/bootstrap-responsive.min.css" rel="stylesheet">
+    <link href="../../theme/css/font-awesome.css" rel="stylesheet">
+    <link href="../../theme/css/pygments.css" rel="stylesheet">
+    <link href="../../theme/css/local.css" rel="stylesheet">
+
+    <!-- Le HTML5 shim, for IE6-8 support of HTML5 elements -->
+    <!--[if lt IE 9]>
+      <script src="//html5shim.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+
+    <!-- Le fav and touch icons -->
+    <link rel="shortcut icon" href="../../theme/img/favicon.ico">
+    <link rel="apple-touch-icon" href="../../theme/img/apple-touch-icon.png">
+    <link rel="apple-touch-icon" sizes="72x72" href="../../theme/img/apple-touch-icon-72x72.png">
+    <link rel="apple-touch-icon" sizes="114x114" href="../../theme/img/apple-touch-icon-114x114.png">
+
+    <link href="../../" type="application/atom+xml" rel="alternate" title="gpocentek's webspace ATOM Feed" />
+  </head>
+  <body>
+    <div class="navbar navbar-fixed-top">
+      <div class="navbar-inner">
+        <div class="container-fluid">
+          <a class="btn btn-navbar" data-toggle="collapse" data-target=".nav-collapse">
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+          </a>
+          <a class="brand" href="../../index.html"><strong>gpocentek's webspace</strong> &ndash;  Random dev & ops notes</a>
+          <div class="nav-collapse">
+            <ul class="nav">
+            </ul>
+            <!--<p class="navbar-text pull-right">Logged in as <a href="#">username</a></p>-->
+          </div><!--/.nav-collapse -->
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      <div class="row">
+        <div class="span8" id="content">
+<section id="content" class="body well">
+    <h1 class="entry-title">Creating a bootable image disk from an iso file</h1>
+    <div class="section" id="goal">
+<h2>Goal</h2>
+<p>Projects that offer bootable ISOs to download and burn don't always provide a
+bootable disk image. The goal of this documentation is to see which
+technologies can be used to transform a bootable iso into a bootable image
+disk.</p>
+<p>We will here use a Linutop demo CD (<tt class="docutils literal">linutopos.iso</tt>) as source and genereate
+a linutopos.img file (downloadable on linutop.com). You will need to adapt a
+few things (mainly the files to move/edit) for other projects.</p>
+<p>We assume that you already know what a boot loader is. We also assume that you
+know a few things about Linux :)</p>
+</div>
+<div class="section" id="tools">
+<h2>Tools</h2>
+<p>Some tools are needed:</p>
+<ul class="simple">
+<li>a Linux box to generate the image</li>
+<li><tt class="docutils literal"><span class="pre">qemu-img</span></tt> (or <tt class="docutils literal"><span class="pre">kvm-img</span></tt>)</li>
+<li><tt class="docutils literal">dosfstools</tt> to format the disk image</li>
+<li><tt class="docutils literal">syslinux</tt> to make it bootable</li>
+</ul>
+</div>
+<div class="section" id="roadmap">
+<h2>Roadmap</h2>
+<p>The goal is basically to switch from the isolinux boot loader to syslinux.</p>
+<p>The iso file contains the following architecture (reduced to the essentials):</p>
+<div class="highlight"><pre><span></span>/
+  some_unimportant_stuff/
+  packages/
+    base.squashfs
+  isolinux/
+    vmlinuz
+    initrd.gz
+    isolinux.cfg
+    vesamenu.c32
+    splash.jpg
+</pre></div>
+<p>The <tt class="docutils literal">base.squashfs</tt> file contains the Linux system. The name and location of
+the file is usually different depending on the distribution. The important
+thing is in fact the <tt class="docutils literal">isolinux/</tt> directory.</p>
+<p>It contains 3 essential things:</p>
+<ul class="simple">
+<li>the kernel: <tt class="docutils literal">vmlinuz</tt></li>
+<li>the initrd (which is essential to boot the whole system): <tt class="docutils literal">initrd.gz</tt></li>
+<li>the boot loader config: <tt class="docutils literal">isolinux.cfg</tt></li>
+</ul>
+<p><tt class="docutils literal">vesamenu.c32</tt> and <tt class="docutils literal">splash.jpg</tt> are used to make the boot menu nicer than a
+<tt class="docutils literal">boot&gt;</tt> prompt.</p>
+<p>So what we will have to do:</p>
+<ul class="simple">
+<li>generate a disk image on which we will be able to copy data</li>
+<li>copy data...</li>
+<li>setup the boot loader (config and boot binary)</li>
+</ul>
+<p>And that's it.</p>
+</div>
+<div class="section" id="step-by-step">
+<h2>Step by step</h2>
+<ol class="arabic">
+<li><p class="first">Create and mount the disk image</p>
+<div class="highlight"><pre><span></span><span class="gp">#</span> qemu-img create linutopos.img 700M
+</pre></div>
+<p>We now need to make the system believe that this file is actually a block
+device. We will use the loop kernel module for this. We can then format and
+mount the device:</p>
+<div class="highlight"><pre><span></span><span class="gp">#</span> losetup /dev/loop5 linutopos.img
+<span class="gp">#</span> mkfs.vfat -F <span class="m">32</span> /dev/loop5
+<span class="gp">#</span> mkdir target
+<span class="gp">#</span> mount /dev/loop5 target/
+</pre></div>
+</li>
+<li><p class="first">Copy the data</p>
+<p>Now that we can write on the disk, we copy the data from the iso:</p>
+<div class="highlight"><pre><span></span><span class="gp">#</span> mkdir <span class="nb">source</span>
+<span class="gp">#</span> mount -o loop linutopos.iso <span class="nb">source</span>
+<span class="gp">#</span> cp -a source/* target/
+<span class="gp">#</span> umount source/
+<span class="gp">#</span> rmdir source/
+</pre></div>
+</li>
+<li><p class="first">Setup the syslinux boot loader</p>
+<p>Syslinux and isolinux are developed as part of the same project. This means
+that the configuration syntax is exactly the same for both projects. The big
+differences are the name of the config files, and their location on the
+media. Let's adapt things:</p>
+<div class="highlight"><pre><span></span><span class="gp">#</span> <span class="nb">cd</span> target/
+<span class="gp">#</span> mv isolinux/isolinux.cfg syslinux.cfg
+<span class="gp">#</span> mv isolinux/splash.jpg .
+<span class="gp">#</span> mv isolinux/vesamenu.c32 .
+</pre></div>
+<p>Now if you try to boot this system, you'll see that the boot loader can't
+find the kernel nor the initrd. We just need to tell syslinux where the
+files really are:</p>
+<div class="highlight"><pre><span></span><span class="gp">#</span> sed -i <span class="s1">&#39;s#vmlinuz#isolinux/vmlinuz#;s#initrd.gz#isolinux/initrd.gz#&#39;</span> <span class="se">\</span>
+    syslinux.cfg
+</pre></div>
+<p>We could just move vmlinuz and initrd.gz to the root of the disk, but some
+boot system (this is the case for Linutop) need to have these files in
+predefined location to start correctly.</p>
+<p>Now that syslinux is configured, let's install the boot loader binary:</p>
+<div class="highlight"><pre><span></span><span class="gp">#</span> <span class="nb">cd</span> ../
+<span class="gp">#</span> umount target
+<span class="gp">#</span> rmdir target/
+<span class="gp">#</span> syslinux /dev/loop5
+<span class="gp">#</span> losetup -d /dev/loop5
+</pre></div>
+<p>That's it! <tt class="docutils literal">linutopos.img</tt> is a bootable disk image.</p>
+</li>
+<li><p class="first">Use the disk image</p>
+<p>The last step is to install the image on a physical device. On Linux this
+can be done with the <tt class="docutils literal">dd</tt> utility:</p>
+<div class="highlight"><pre><span></span><span class="go">dd if=linutopos.img of=/dev/sdX</span>
+</pre></div>
+<p>You can find similar tools for Windows (for instance <a class="reference external" href="https://launchpad.net/win32-image-writer">Image Writer</a>).</p>
+</li>
+</ol>
+</div>
+
+</section>
+        </div><!--/span-->
+        <div class="span3 well sidebar-nav" id="sidebar">
+<ul class="nav nav-list">
+<li class="nav-header"><h4><i class="icon-home icon-large"></i> social</h4></li>
+    <li><a href="https://www.linkedin.com/in/gauvainpocentek"><i class="icon-linkedin-sign icon-large"></i>linkedin</a></li>
+    <li><a href="https://github.com/gpocentek"><i class="icon-github-sign icon-large"></i>github</a></li>
+
+<li class="nav-header"><h4><i class="icon-folder-close icon-large"></i>Categories</h4></li>
+<li>
+<a href="../../category/ansible.html">
+    <i class="icon-folder-open icon-large"></i>ansible
+</a>
+</li>
+<li>
+<a href="../../category/containers.html">
+    <i class="icon-folder-open icon-large"></i>containers
+</a>
+</li>
+<li>
+<a href="../../category/lxc.html">
+    <i class="icon-folder-open icon-large"></i>lxc
+</a>
+</li>
+<li>
+<a href="../../category/lxd.html">
+    <i class="icon-folder-open icon-large"></i>lxd
+</a>
+</li>
+<li>
+<a href="../../category/medibuntu.html">
+    <i class="icon-folder-open icon-large"></i>medibuntu
+</a>
+</li>
+<li>
+<a href="../../category/misc.html">
+    <i class="icon-folder-open icon-large"></i>misc
+</a>
+</li>
+<li>
+<a href="../../category/openstack.html">
+    <i class="icon-folder-open icon-large"></i>openstack
+</a>
+</li>
+<li>
+<a href="../../category/python-gitlab.html">
+    <i class="icon-folder-open icon-large"></i>python-gitlab
+</a>
+</li>
+
+<li class="nav-header"><h4><i class="icon-th-list icon-large"></i>Archives</h4></li>
+<li><a href="../../archives.html"><i class="icon-edit icon-large"></i>articles</a></li>
+
+<li class="nav-header"><h4><i class="icon-inbox icon-large"></i>Contact</h4></li>
+<li><a href="mailto:gauvainpocentek@gmail.com">
+    <i class="icon-envelope icon-large"></i>email</a></li>
+</li>
+
+
+
+<li></li>
+</ul>        </div><!--/.well -->
+
+      </div><!--/row-->
+
+      <hr>
+
+    </div><!--/.fluid-container-->
+
+<script type="text/javascript">
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-77146095-1']);
+  _gaq.push(['_trackPageview']);
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+    <!-- Le javascript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="../../theme/js/jquery-1.7.2.min.js"></script>
+    <script src="../../theme/js/bootstrap.min.js"></script>
+  </body>
+</html>

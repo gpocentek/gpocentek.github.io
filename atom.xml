@@ -1,0 +1,915 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"><title>gpocentek's webspace</title><link href="http://gauvain.pocentek.net/" rel="alternate"></link><link href="http://gauvain.pocentek.net/atom.xml" rel="self"></link><id>http://gauvain.pocentek.net/</id><updated>2017-12-09T18:00:00+01:00</updated><entry><title>OpenShift Origin on a single node</title><link href="http://gauvain.pocentek.net/openshift-single-node.html" rel="alternate"></link><published>2017-12-09T18:00:00+01:00</published><updated>2017-12-09T18:00:00+01:00</updated><author><name>Gauvain Pocentek</name></author><id>tag:gauvain.pocentek.net,2017-12-09:/openshift-single-node.html</id><summary type="html">&lt;p&gt;I needed to deploy an OpenShift Origin instance for testing purposes. This
+article describes how I used &lt;cite&gt;openshift-ansible&lt;/cite&gt; to deploy the software.&lt;/p&gt;
+&lt;div class="section" id="existing-tools"&gt;
+&lt;h2&gt;Existing tools&lt;/h2&gt;
+&lt;p&gt;There are several solutions to do this:&lt;/p&gt;
+&lt;ul class="simple"&gt;
+&lt;li&gt;you can use &lt;a class="reference external" href="https://docs.openshift.org/latest/minishift/index.html"&gt;minishift&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;or you can deploy an all-in-one server using &lt;a class="reference external" href="https://docs.openshift.org/latest/getting_started/administrators.html#running-in-a-docker-container"&gt;a container&lt;/a&gt;
+or &lt;a class="reference external" href="https://docs.openshift.org/latest/getting_started/administrators.html#downloading-the-binary"&gt;a single binary&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;These …&lt;/p&gt;&lt;/div&gt;</summary><content type="html">&lt;p&gt;I needed to deploy an OpenShift Origin instance for testing purposes. This
+article describes how I used &lt;cite&gt;openshift-ansible&lt;/cite&gt; to deploy the software.&lt;/p&gt;
+&lt;div class="section" id="existing-tools"&gt;
+&lt;h2&gt;Existing tools&lt;/h2&gt;
+&lt;p&gt;There are several solutions to do this:&lt;/p&gt;
+&lt;ul class="simple"&gt;
+&lt;li&gt;you can use &lt;a class="reference external" href="https://docs.openshift.org/latest/minishift/index.html"&gt;minishift&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;or you can deploy an all-in-one server using &lt;a class="reference external" href="https://docs.openshift.org/latest/getting_started/administrators.html#running-in-a-docker-container"&gt;a container&lt;/a&gt;
+or &lt;a class="reference external" href="https://docs.openshift.org/latest/getting_started/administrators.html#downloading-the-binary"&gt;a single binary&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;These solutions work fine but provide a limited set of features by default.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class="section" id="environment"&gt;
+&lt;h2&gt;Environment&lt;/h2&gt;
+&lt;p&gt;I used a x86 physical server for the deployment:&lt;/p&gt;
+&lt;ul class="simple"&gt;
+&lt;li&gt;8 cores&lt;/li&gt;
+&lt;li&gt;32G RAM&lt;/li&gt;
+&lt;li&gt;2 x 1T disks&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;OpenShift and the ansible playbook only support RedHat-like distributions. I
+used a minimal CentOS 7.4 installation without SELinux, and without firewalld.&lt;/p&gt;
+&lt;p&gt;The machine DNS name is &lt;tt class="docutils literal"&gt;op1.pocentek.net&lt;/tt&gt;.&lt;/p&gt;
+&lt;div class="section" id="docker-setup"&gt;
+&lt;h3&gt;Docker setup&lt;/h3&gt;
+&lt;p&gt;The OpenShift playbook requires a working docker-engine installation on the
+target host. For better performance OpenShift recommends to use the &lt;cite&gt;overlay2&lt;/cite&gt;
+storage driver. This driver requires an XFS filesystem.&lt;/p&gt;
+&lt;p&gt;Docker installation steps:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="gp"&gt;#&lt;/span&gt; mkfs.xfs /dev/sdb1  &lt;span class="c1"&gt;# dedicated disk for docker in this setup&lt;/span&gt;
+&lt;span class="gp"&gt;#&lt;/span&gt; mkdir /var/lib/docker
+&lt;span class="gp"&gt;#&lt;/span&gt; &lt;span class="nb"&gt;echo&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;/dev/sdb1 /var/lib/docker xfs defaults 0 0&amp;#39;&lt;/span&gt; &amp;gt;&amp;gt; /etc/fstab
+&lt;span class="gp"&gt;#&lt;/span&gt; mount -a
+&lt;span class="gp"&gt;#&lt;/span&gt; yum install -y docker
+&lt;span class="gp"&gt;#&lt;/span&gt; &lt;span class="nb"&gt;echo&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;{&amp;quot;storage-driver&amp;quot;: &amp;quot;overlay2&amp;quot;}&amp;#39;&lt;/span&gt; &amp;gt; /etc/docker/daemon.json
+&lt;span class="gp"&gt;#&lt;/span&gt; systemctl &lt;span class="nb"&gt;enable&lt;/span&gt; docker.service
+&lt;span class="gp"&gt;#&lt;/span&gt; systemctl start docker.service
+&lt;span class="gp"&gt;#&lt;/span&gt; docker ps  &lt;span class="c1"&gt;# make sure you can talk to the docker daemon&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class="section" id="dns-setup"&gt;
+&lt;h3&gt;DNS setup&lt;/h3&gt;
+&lt;p&gt;To benefit from OpenShift routing feature I defined a wildcard A entry in the
+&lt;tt class="docutils literal"&gt;pocentek.net&lt;/tt&gt; DNS zone:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;*.oc.pocentek.net. IN A 12.34.56.78
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;This allows dynamic resolution for all the application deployed on OpenShift,
+as long as they are routed using a matching domain name.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class="section" id="playbook-configuration"&gt;
+&lt;h2&gt;Playbook configuration&lt;/h2&gt;
+&lt;p&gt;The OpenShift playbook requires only a few variables to be set to perform the
+installation. But a single node setup requires a few tweaks.&lt;/p&gt;
+&lt;p&gt;You first need to retrieve the code. I used the 3.6 version of OpenShift if
+this example:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="gp"&gt;$&lt;/span&gt; git clone https://github.com/openshift/openshift-ansible.git
+&lt;span class="gp"&gt;$&lt;/span&gt; &lt;span class="nb"&gt;cd&lt;/span&gt; openshift-ansible
+&lt;span class="gp"&gt;$&lt;/span&gt; git checkout --track origin/release-3.6
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;All the settings are defined in an inventory file. I used the following
+&lt;tt class="docutils literal"&gt;inventory/hosts&lt;/tt&gt; file:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="k"&gt;[OSEv3:children]&lt;/span&gt;
+&lt;span class="na"&gt;masters&lt;/span&gt;
+&lt;span class="na"&gt;nodes&lt;/span&gt;
+&lt;span class="na"&gt;etcd&lt;/span&gt;
+
+&lt;span class="k"&gt;[masters]&lt;/span&gt;
+&lt;span class="na"&gt;op1.pocentek.net openshift_public_hostname&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;{{ inventory_hostname }}&amp;quot; openshift_hostname=&amp;quot;{{ ansible_default_ipv4.address }}&amp;quot;&lt;/span&gt;
+
+&lt;span class="k"&gt;[etcd]&lt;/span&gt;
+&lt;span class="na"&gt;op1.pocentek.net&lt;/span&gt;
+
+&lt;span class="k"&gt;[nodes]&lt;/span&gt;
+&lt;span class="na"&gt;op1.pocentek.net openshift_node_labels&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;{&amp;#39;region&amp;#39;: &amp;#39;primary&amp;#39;, &amp;#39;zone&amp;#39;: &amp;#39;default&amp;#39;}&amp;quot; openshift_schedulable=true&lt;/span&gt;
+
+&lt;span class="k"&gt;[OSEv3:vars]&lt;/span&gt;
+&lt;span class="na"&gt;ansible_ssh_user&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s"&gt;root&lt;/span&gt;
+&lt;span class="na"&gt;ansible_become&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s"&gt;no&lt;/span&gt;
+
+&lt;span class="na"&gt;openshift_deployment_type&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s"&gt;origin&lt;/span&gt;
+&lt;span class="na"&gt;openshift_release&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s"&gt;v3.6&lt;/span&gt;
+
+&lt;span class="na"&gt;openshift_master_default_subdomain&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s"&gt;oc.pocentek.net&lt;/span&gt;
+
+&lt;span class="na"&gt;openshift_master_identity_providers&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s"&gt;[{&amp;#39;name&amp;#39;: &amp;#39;htpasswd_auth&amp;#39;, &amp;#39;login&amp;#39;: &amp;#39;true&amp;#39;, &amp;#39;challenge&amp;#39;: &amp;#39;true&amp;#39;, &amp;#39;kind&amp;#39;: &amp;#39;HTPasswdPasswordIdentityProvider&amp;#39;, &amp;#39;filename&amp;#39;: &amp;#39;/etc/origin/master/htpasswd&amp;#39;}]&lt;/span&gt;
+&lt;span class="na"&gt;openshift_master_htpasswd_users&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s"&gt;{&amp;#39;gpocentek&amp;#39;: &amp;#39;some_htpasswd_encrypted_passwd&amp;#39;}&lt;/span&gt;
+
+&lt;span class="na"&gt;openshift_hosted_router_replicas&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s"&gt;1&lt;/span&gt;
+&lt;span class="na"&gt;openshift_hosted_registry_replicas&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s"&gt;1&lt;/span&gt;
+
+&lt;span class="na"&gt;openshift_router_selector&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;region=primary&amp;#39;&lt;/span&gt;
+&lt;span class="na"&gt;openshift_registry_selector&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;region=primary&amp;#39;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Some variables require a bit of explanation:&lt;/p&gt;
+&lt;dl class="docutils"&gt;
+&lt;dt&gt;openshift_schedulable=true&lt;/dt&gt;
+&lt;dd&gt;By default a master node will be configured to be ignored by the OpenShift
+scheduler. Application containers will not be created on masters. Since we
+only have one node, the master should be configured to host application
+containers.&lt;/dd&gt;
+&lt;dt&gt;openshift_router_selector and openshift_registry_selector&lt;/dt&gt;
+&lt;dd&gt;&lt;p class="first"&gt;Routers (which expose services to the outside world) and the docker
+registry both run as containers on one or several nodes of the OpenShift
+cluster. By default they run on infrastructure nodes: dedicated nodes
+hosting internal services. To make sure that these services are properly
+scheduled and started on the single node deployment we explicitly label the
+node (&lt;tt class="docutils literal"&gt;region: primay&lt;/tt&gt;) and configure the router and registry selector to
+match this node.&lt;/p&gt;
+&lt;p class="last"&gt;We also make sure that only 1 container is scheduled for each service
+(&lt;tt class="docutils literal"&gt;openshift_hosted_{router,registry}_replicas&lt;/tt&gt;).&lt;/p&gt;
+&lt;/dd&gt;
+&lt;dt&gt;openshift_master_htpasswd_users&lt;/dt&gt;
+&lt;dd&gt;In this setup htpasswd authentication is used, and a &lt;tt class="docutils literal"&gt;gpocentek&lt;/tt&gt; user is
+created by the playbook. You can generate the encrypted password using the
+&lt;tt class="docutils literal"&gt;htpasswd&lt;/tt&gt; tool.&lt;/dd&gt;
+&lt;/dl&gt;
+&lt;p&gt;The node can be deployed using:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="gp"&gt;$&lt;/span&gt; ansible-playbook -i inventory/hosts playbooks/byo/config.yml
+&lt;/pre&gt;&lt;/div&gt;
+&lt;div class="admonition note"&gt;
+&lt;p class="first admonition-title"&gt;Note&lt;/p&gt;
+&lt;p class="last"&gt;Note: you can find sample inventories in &lt;tt class="docutils literal"&gt;inventory/byo/&lt;/tt&gt;.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class="section" id="storage"&gt;
+&lt;h2&gt;Storage&lt;/h2&gt;
+&lt;p&gt;One feature I couldn't manage to deploy is persistent storage support. Since
+the deployment isn't meant for production, I used a NFS server deployed on the
+OpenShift machine to provide PVs:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="k"&gt;for&lt;/span&gt; i in &lt;span class="o"&gt;{&lt;/span&gt;&lt;span class="m"&gt;1&lt;/span&gt;..9&lt;span class="o"&gt;}&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt; &lt;span class="k"&gt;do&lt;/span&gt;
+    mkdir -p /exports/volumes/vol0&lt;span class="nv"&gt;$i&lt;/span&gt;
+    chown nfsnobody:nfsnobody /exports/volumes/vol0&lt;span class="nv"&gt;$i&lt;/span&gt;
+    chmod &lt;span class="m"&gt;775&lt;/span&gt; /exports/volumes/vol0&lt;span class="nv"&gt;$i&lt;/span&gt;
+    &lt;span class="nb"&gt;echo&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;/exports/volumes/vol0&lt;/span&gt;&lt;span class="nv"&gt;$i&lt;/span&gt;&lt;span class="s2"&gt; *(rw,root_squash,no_wdelay)&amp;quot;&lt;/span&gt; &amp;gt;&amp;gt; /etc/exports
+
+    cat &lt;span class="p"&gt;|&lt;/span&gt; oc create -f - &lt;span class="s"&gt;&amp;lt;&amp;lt; EOF&lt;/span&gt;
+&lt;span class="s"&gt;    apiVersion: v1&lt;/span&gt;
+&lt;span class="s"&gt;    kind: PersistentVolume&lt;/span&gt;
+&lt;span class="s"&gt;    metadata:&lt;/span&gt;
+&lt;span class="s"&gt;      name: pv0$i&lt;/span&gt;
+&lt;span class="s"&gt;    spec:&lt;/span&gt;
+&lt;span class="s"&gt;      capacity:&lt;/span&gt;
+&lt;span class="s"&gt;        storage: 5Gi&lt;/span&gt;
+&lt;span class="s"&gt;      accessModes:&lt;/span&gt;
+&lt;span class="s"&gt;        - ReadWriteOnce&lt;/span&gt;
+&lt;span class="s"&gt;      nfs:&lt;/span&gt;
+&lt;span class="s"&gt;        path: /exports/volumes/vol0$i&lt;/span&gt;
+&lt;span class="s"&gt;        server: 172.17.0.1&lt;/span&gt;
+&lt;span class="s"&gt;      persistentVolumeReclaimPolicy: Recycle&lt;/span&gt;
+&lt;span class="s"&gt;    EOF&lt;/span&gt;
+&lt;span class="k"&gt;done&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Containers using PVCs created using these PVs most define a custom
+&lt;tt class="docutils literal"&gt;securityContext&lt;/tt&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="l l-Scalar l-Scalar-Plain"&gt;securityContext&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;
+  &lt;span class="l l-Scalar l-Scalar-Plain"&gt;supplementalGroups&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="p p-Indicator"&gt;[&lt;/span&gt;&lt;span class="nv"&gt;65534&lt;/span&gt;&lt;span class="p p-Indicator"&gt;]&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;References:
+&lt;a class="reference external" href="https://docs.openshift.org/latest/install_config/persistent_storage/persistent_storage_nfs.html#nfs-supplemental-groups"&gt;https://docs.openshift.org/latest/install_config/persistent_storage/persistent_storage_nfs.html#nfs-supplemental-groups&lt;/a&gt;&lt;/p&gt;
+&lt;/div&gt;
+</content><category term="openshift"></category><category term="ansible"></category></entry><entry><title>The lost OpenStack project</title><link href="http://gauvain.pocentek.net/lost-openstack-projet.html" rel="alternate"></link><published>2017-04-29T11:32:00+02:00</published><updated>2017-04-29T11:32:00+02:00</updated><author><name>Gauvain Pocentek</name></author><id>tag:gauvain.pocentek.net,2017-04-29:/lost-openstack-projet.html</id><summary type="html">&lt;p&gt;Another fun issue with an OpenStack platform this week: a lost Keystone
+project. This is the story of how we brought this project back to life without
+loosing existing resources.&lt;/p&gt;
+&lt;p&gt;We have a small OpenStack platform running in our &lt;a class="reference external" href="https://www.objectif-libre.com"&gt;Objectif Libre&lt;/a&gt; office in Toulouse, France. We use it
+internally to …&lt;/p&gt;</summary><content type="html">&lt;p&gt;Another fun issue with an OpenStack platform this week: a lost Keystone
+project. This is the story of how we brought this project back to life without
+loosing existing resources.&lt;/p&gt;
+&lt;p&gt;We have a small OpenStack platform running in our &lt;a class="reference external" href="https://www.objectif-libre.com"&gt;Objectif Libre&lt;/a&gt; office in Toulouse, France. We use it
+internally to run test instances. It's running Ocata, and the Keystone setup
+uses the domains feature to separate service and temporary accounts
+(&lt;tt class="docutils literal"&gt;default&lt;/tt&gt; domain) from LDAP-backed accounts (&lt;tt class="docutils literal"&gt;olcorp&lt;/tt&gt; domain). The only
+project in the &lt;tt class="docutils literal"&gt;olcorp&lt;/tt&gt; domain, &lt;tt class="docutils literal"&gt;lab&lt;/tt&gt;, holds all our virtual resources.&lt;/p&gt;
+&lt;div class="section" id="luke-s-problem"&gt;
+&lt;h2&gt;Luke's problem&lt;/h2&gt;
+&lt;p&gt;My colleague Luke (fictional name) could not login anymore at some point this
+week. He received this very explicit message: &amp;quot;You are not authorized for any
+projects or domains.&amp;quot;&lt;/p&gt;
+&lt;p&gt;Not cool.&lt;/p&gt;
+&lt;p&gt;He uses OpenStack a lot, knows what he's doing, and his account had not been
+suspended. I tried with my own account: same error. I tried again with the
+cloud-admin account this time - stored in the Keystone database, not on the
+LDAP server. Everything went fine, I could perform requests. One of those
+requests was:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;openstack project list --domain olcorp
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Empty answer. No project means no way to create or access resources, even if
+authentication is valid.&lt;/p&gt;
+&lt;p&gt;The &lt;tt class="docutils literal"&gt;lab&lt;/tt&gt; project had disappeared.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class="section" id="restoring-the-project"&gt;
+&lt;h2&gt;Restoring the project&lt;/h2&gt;
+&lt;p&gt;When a project is removed from the Keystone database, the associated resources
+(instances, volumes, networks, ...) are not destroyed. This might appear as a
+maintenance problem but in our case it's been quite useful.&lt;/p&gt;
+&lt;p&gt;I hoped that Keystone used soft-deletion of database resources (the data would
+still be there, but marked as deleted), but no luck there.&lt;/p&gt;
+&lt;p&gt;The revival of the project required a few steps:&lt;/p&gt;
+&lt;ol class="arabic"&gt;
+&lt;li&gt;&lt;p class="first"&gt;Creation of a new &lt;tt class="docutils literal"&gt;lab&lt;/tt&gt; project. This is a start but is not enough: the ID
+of the new project doesn't match the ID of the removed one. All the
+OpenStack resources are associated to a project using its ID, so we needed
+the same ID. It is not possible to change/define the project ID using the
+API (AFAIK).&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p class="first"&gt;Bit of MySQL tweaking. I try to avoid modifying resources on the SQL server
+as much as I can but it can be very handy:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;. openrc.sh  &lt;span class="c1"&gt;# source the OpenStack env file to get the old project ID&lt;/span&gt;
+mysql keystonedb -e &lt;span class="s2"&gt;&amp;quot;update project set id=&amp;#39;&lt;/span&gt;&lt;span class="nv"&gt;$OS_PROJECT_ID&lt;/span&gt;&lt;span class="s2"&gt;&amp;#39; where name=&amp;#39;lab&amp;#39;&amp;quot;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p class="first"&gt;Setup of the roles for users. We use LDAP group-based authorization, with
+only 2 roles (&lt;tt class="docutils literal"&gt;admin&lt;/tt&gt; and &lt;tt class="docutils literal"&gt;_member_&lt;/tt&gt;) so restoring the permissions has
+been easy to do. It might have been more painful with more roles, groups
+or users.&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;The process has been very easy and restoring the project took very little time.&lt;/p&gt;
+&lt;p&gt;We still don't know what happened on the platform, and why the project
+disappeared, but the keystone access log is quite clear:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;10.78.1.21 - - [28/Apr/2017:22:24:20 +0200] &amp;quot;DELETE /v3/projects/68a93cc709b44de08cfd11e6bdac2b9b HTTP/1.1&amp;quot; 204 281 &amp;quot;-&amp;quot; &amp;quot;python-keystoneclient&amp;quot;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Could be a human error or a bug (seems unlikely but eh). Will be worth a new
+blog post if we ever find out :)&lt;/p&gt;
+&lt;/div&gt;
+</content><category term="keystone"></category><category term="project"></category><category term="debug"></category></entry><entry><title>OpenStack upgrade: when the L3 agent went cuckoo</title><link href="http://gauvain.pocentek.net/neutron-upgrade-rootwrap.html" rel="alternate"></link><published>2017-04-22T08:54:00+02:00</published><updated>2017-04-22T08:54:00+02:00</updated><author><name>Gauvain Pocentek</name></author><id>tag:gauvain.pocentek.net,2017-04-22:/neutron-upgrade-rootwrap.html</id><summary type="html">&lt;div class="section" id="the-context"&gt;
+&lt;h2&gt;The context&lt;/h2&gt;
+&lt;p&gt;This week we upgraded an OpenStack platform from Liberty to Mitaka for a
+customer. Small platform, no need to keep the APIs up, no big deal.&lt;/p&gt;
+&lt;p&gt;The platform has 3 controller/network nodes, and 3 computes. The neutron
+configuration is quite common: Open vSwitch ML2 mechanism, self-service
+networks …&lt;/p&gt;&lt;/div&gt;</summary><content type="html">&lt;div class="section" id="the-context"&gt;
+&lt;h2&gt;The context&lt;/h2&gt;
+&lt;p&gt;This week we upgraded an OpenStack platform from Liberty to Mitaka for a
+customer. Small platform, no need to keep the APIs up, no big deal.&lt;/p&gt;
+&lt;p&gt;The platform has 3 controller/network nodes, and 3 computes. The neutron
+configuration is quite common: Open vSwitch ML2 mechanism, self-service
+networks, virtual routers and floating IPs, L3 HA.&lt;/p&gt;
+&lt;p&gt;At  &lt;a class="reference external" href="https://www.objectif-libre.com/"&gt;Objectif Libre&lt;/a&gt; we use a home-grown
+ansible playbook to deploy and upgrade OpenStack platforms, and everything went
+fine. Well, almost.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class="section" id="the-problem"&gt;
+&lt;h2&gt;The problem&lt;/h2&gt;
+&lt;p&gt;After the L3 agent upgrade and restart the routers were still doing their job,
+but adding new interfaces to them didn't work. We checked the logs. The agent
+was logging a &lt;strong&gt;lot&lt;/strong&gt; of python traces, such as this one:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent [-] Failed to process compatible router &amp;#39;8a776bc6-b2e3-4439-b122-45ce7479b0a8&amp;#39;
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent Traceback (most recent call last):
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &amp;quot;/usr/lib/python2.7/site-packages/neutron/agent/l3/agent.py&amp;quot;, line 501, in _process_router_update
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     self._process_router_if_compatible(router)
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &amp;quot;/usr/lib/python2.7/site-packages/neutron/agent/l3/agent.py&amp;quot;, line 440, in _process_router_if_compatible
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     self._process_updated_router(router)
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &amp;quot;/usr/lib/python2.7/site-packages/neutron/agent/l3/agent.py&amp;quot;, line 454, in _process_updated_router
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     ri.process(self)
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &amp;quot;/usr/lib/python2.7/site-packages/neutron/agent/l3/ha_router.py&amp;quot;, line 389, in process
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     self.enable_keepalived()
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &amp;quot;/usr/lib/python2.7/site-packages/neutron/agent/l3/ha_router.py&amp;quot;, line 123, in enable_keepalived
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     self.keepalived_manager.spawn()
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &amp;quot;/usr/lib/python2.7/site-packages/neutron/agent/linux/keepalived.py&amp;quot;, line 401, in spawn
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     keepalived_pm.enable(reload_cfg=True)
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &amp;quot;/usr/lib/python2.7/site-packages/neutron/agent/linux/external_process.py&amp;quot;, line 94, in enable
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     self.reload_cfg()
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &amp;quot;/usr/lib/python2.7/site-packages/neutron/agent/linux/external_process.py&amp;quot;, line 97, in reload_cfg
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     self.disable(&amp;#39;HUP&amp;#39;)
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &amp;quot;/usr/lib/python2.7/site-packages/neutron/agent/linux/external_process.py&amp;quot;, line 109, in disable
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     utils.execute(cmd, run_as_root=True)
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &amp;quot;/usr/lib/python2.7/site-packages/neutron/agent/linux/utils.py&amp;quot;, line 116, in execute
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     execute_rootwrap_daemon(cmd, process_input, addl_env))
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &amp;quot;/usr/lib/python2.7/site-packages/neutron/agent/linux/utils.py&amp;quot;, line 102, in execute_rootwrap_daemon
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     return client.execute(cmd, process_input)
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &amp;quot;/usr/lib/python2.7/site-packages/oslo_rootwrap/client.py&amp;quot;, line 128, in execute
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     try:
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &amp;quot;&amp;lt;string&amp;gt;&amp;quot;, line 2, in run_one_command
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &amp;quot;/usr/lib64/python2.7/multiprocessing/managers.py&amp;quot;, line 773, in _callmethod
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     raise convert_to_error(kind, result)
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent NoFilterMatched
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The trace shows that a problem occured in &lt;tt class="docutils literal"&gt;oslo_rootwrap&lt;/tt&gt;, leading to a
+&lt;tt class="docutils literal"&gt;NoFilterMatched&lt;/tt&gt; exception. &lt;tt class="docutils literal"&gt;oslo.rootwrap&lt;/tt&gt; is the library that allows
+unprivileged applications such as &lt;tt class="docutils literal"&gt;&lt;span class="pre"&gt;neutron-l3-agent&lt;/span&gt;&lt;/tt&gt; to execute system
+commands as &lt;tt class="docutils literal"&gt;root&lt;/tt&gt;.  It is based on  &lt;tt class="docutils literal"&gt;sudo&lt;/tt&gt; and provides its own
+authorization mechanism.&lt;/p&gt;
+&lt;p&gt;The &lt;tt class="docutils literal"&gt;NoFilterMatched&lt;/tt&gt; exception is raised by &lt;tt class="docutils literal"&gt;oslo_rootwrap&lt;/tt&gt; when the
+requested command doesn't match any of those defined in the configuration. This
+is great, but which command?&lt;/p&gt;
+&lt;p&gt;Activating the debug in the L3 agent didn't help, the problematic command
+still didn't show in the logs.&lt;/p&gt;
+&lt;p&gt;So we patched oslo to make it a bit more verbose. We modified
+&lt;tt class="docutils literal"&gt;&lt;span class="pre"&gt;/usr/lib/python2.7/site-packages/oslo_rootwrap/client.py&lt;/span&gt;&lt;/tt&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="gd"&gt;--- client.py.orig   2017-04-22 08:19:16.463450594 +0200&lt;/span&gt;
+&lt;span class="gi"&gt;+++ client.py        2017-04-22 08:21:51.590386941 +0200&lt;/span&gt;
+&lt;span class="gu"&gt;@@ -121,6 +121,7 @@&lt;/span&gt;
+             return self._proxy
+
+     def execute(self, cmd, stdin=None):
+&lt;span class="gi"&gt;+        LOG.info(&amp;#39;CMD: %s&amp;#39; % cmd)&lt;/span&gt;
+         self._ensure_initialized()
+         proxy = self._proxy
+         retry = False
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;After the L3 agent restart the logs became a bit more interesting:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;2017-04-20 14:57:28.602 10262 INFO oslo_rootwrap.client [req-f6dc5751-96e3-41b8-86bc-f7f98ff26f12 - 3ce2f82bc46b429285ba0e17840e6cf7 - - -] CMD: [&amp;#39;kill&amp;#39;, &amp;#39;-HUP&amp;#39;, &amp;#39;14410&amp;#39;]
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent [req-f6dc5751-96e3-41b8-86bc-f7f98ff26f12 - 3ce2f82bc46b429285ba0e17840e6cf7 - - -] Failed to process compatible router &amp;#39;eb356f30-98c9-4641-9f99-2ad91a6a7223&amp;#39;
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent Traceback (most recent call last):
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent   File &amp;quot;/usr/lib/python2.7/site-packages/neutron/agent/l3/agent.py&amp;quot;, line 501, in _process_router_update
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent     self._process_router_if_compatible(router)
+[...]
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent   File &amp;quot;/usr/lib/python2.7/site-packages/oslo_rootwrap/client.py&amp;quot;, line 129, in execute
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent     res = proxy.run_one_command(cmd, stdin)
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent   File &amp;quot;&amp;lt;string&amp;gt;&amp;quot;, line 2, in run_one_command
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent   File &amp;quot;/usr/lib64/python2.7/multiprocessing/managers.py&amp;quot;, line 773, in _callmethod
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent     raise convert_to_error(kind, result)
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent NoFilterMatched
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The L3 agent was trying to send a signal to a process with PID 14410. &lt;tt class="docutils literal"&gt;ps&lt;/tt&gt;
+told us more about it:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;root     14410  0.0  0.0 111640  1324 ?        Ss   mars01   3:28 keepalived -P [...]
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;&lt;tt class="docutils literal"&gt;keepalived&lt;/tt&gt; is used by the L3 agent for the router HA feature. For each
+router a VRRP/keepalived process is started to handle the failover in case a
+node goes down.&lt;/p&gt;
+&lt;p&gt;So neutron was not authorized to send signals to this process.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class="section" id="the-solution"&gt;
+&lt;h2&gt;The solution&lt;/h2&gt;
+&lt;p&gt;Knowing that the problem was related to a missing authorization in the
+&lt;tt class="docutils literal"&gt;oslo_rootwrap&lt;/tt&gt; configuration we did a bit of digging in the configuration
+files:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="gp"&gt;$&lt;/span&gt; grep keepalived /usr/share/neutron/rootwrap/*.filters
+&lt;span class="go"&gt;/usr/share/neutron/rootwrap/l3.filters:keepalived: CommandFilter, keepalived, root&lt;/span&gt;
+&lt;span class="go"&gt;/usr/share/neutron/rootwrap/l3.filters:kill_keepalived: KillFilter, root, /usr/sbin/keepalived, -HUP, -15, -9&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The configuration allowed neutron to send signals to &lt;tt class="docutils literal"&gt;/usr/sbin/keepalived&lt;/tt&gt;
+processes, but our process was called &lt;tt class="docutils literal"&gt;keepalived&lt;/tt&gt;, without absolute path. So
+we added a new configuration do deal with the existing processes:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;kill_keepalived_no_path: KillFilter, root, keepalived, -HUP, -15, -9
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;After a restart the L3 agent started to act as expected again.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class="section" id="conclusion"&gt;
+&lt;h2&gt;Conclusion&lt;/h2&gt;
+&lt;p&gt;Mitaka is a somewhat old realease in OpenStack terms, and we didn't face this
+problem during upgrades to more recent OpenStack versions.&lt;/p&gt;
+&lt;p&gt;Knowing how to read python traces and how to dig into OpenStack code is still
+an interesting skill to possess to be able to understand situations like this
+one (google didn't help much).&lt;/p&gt;
+&lt;p&gt;&lt;tt class="docutils literal"&gt;rootwrap&lt;/tt&gt; usually does its job quite well and this problem gave us the
+opportunity to better understand how it works and how to deal with its
+configuration.&lt;/p&gt;
+&lt;/div&gt;
+</content><category term="neutron"></category><category term="rootwrap"></category><category term="upgrade"></category></entry><entry><title>Securing playbooks with ansible-vault</title><link href="http://gauvain.pocentek.net/ansible-vault-and-pass.html" rel="alternate"></link><published>2017-01-15T21:29:00+01:00</published><updated>2017-01-15T21:29:00+01:00</updated><author><name>Gauvain Pocentek</name></author><id>tag:gauvain.pocentek.net,2017-01-15:/ansible-vault-and-pass.html</id><summary type="html">&lt;p&gt;Ansible playbooks often contain sensitive information that need to be kept
+private: passwords, private keys, DNS transfer keys and so on.
+It becomes a real problem when you have to share the playbooks and their
+sensitive data with coworkers in a git repository.&lt;/p&gt;
+&lt;p&gt;To solve this problem ansible provides the …&lt;/p&gt;</summary><content type="html">&lt;p&gt;Ansible playbooks often contain sensitive information that need to be kept
+private: passwords, private keys, DNS transfer keys and so on.
+It becomes a real problem when you have to share the playbooks and their
+sensitive data with coworkers in a git repository.&lt;/p&gt;
+&lt;p&gt;To solve this problem ansible provides the &lt;tt class="docutils literal"&gt;&lt;span class="pre"&gt;ansible-vault&lt;/span&gt;&lt;/tt&gt; tool. It encrypts
+files using a password:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="gp"&gt;$&lt;/span&gt; ansible-vault create group_vars/host
+&lt;span class="go"&gt;New Vault password:&lt;/span&gt;
+&lt;span class="go"&gt;Confirm New Vault password:&lt;/span&gt;
+&lt;span class="go"&gt;EDIT EDIT EDIT&lt;/span&gt;
+&lt;span class="gp"&gt;$&lt;/span&gt; ansible-vault edit group_vars/host
+&lt;span class="go"&gt;Vault password:&lt;/span&gt;
+&lt;span class="go"&gt;UPDATE UPDATE UPDATE&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;What you commit in your git repository is something that looks like this (only
+longer):&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;ANSIBLE_VAULT;1.1;AES256
+6661656265653234313962356465316166383...
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;You then need to use the &lt;tt class="docutils literal"&gt;&lt;span class="pre"&gt;--ask-vault-pass&lt;/span&gt;&lt;/tt&gt; or &lt;tt class="docutils literal"&gt;&lt;span class="pre"&gt;--vault-password-file&lt;/span&gt;&lt;/tt&gt;
+options to unlock the encrypted file when you run your playbook. Nothing
+complicated, but:&lt;/p&gt;
+&lt;ul class="simple"&gt;
+&lt;li&gt;what happens if you don't manually run ansible, but instead use an
+orchestration tool like Jenkins or Ansible Tower?&lt;/li&gt;
+&lt;li&gt;how do you share and store the password with your coworkers in a secure
+manner?&lt;/li&gt;
+&lt;/ul&gt;
+&lt;div class="section" id="what-to-do"&gt;
+&lt;h2&gt;What to do?&lt;/h2&gt;
+&lt;p&gt;A solution is to use an external tool to store and retrieve the password, for
+instance &lt;a class="reference external" href="https://www.passwordstore.org/"&gt;pass&lt;/a&gt; or &lt;a class="reference external" href="https://www.vaultproject.io/"&gt;HashiCorp Vault&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;To do this you need to use a script instead a file with the
+&lt;tt class="docutils literal"&gt;&lt;span class="pre"&gt;--vault-password-file&lt;/span&gt;&lt;/tt&gt; option. You also need to tell ansible to always use
+this file:&lt;/p&gt;
+&lt;ol class="arabic"&gt;
+&lt;li&gt;&lt;p class="first"&gt;Write a script in a &lt;tt class="docutils literal"&gt;vault_pass&lt;/tt&gt; file. This script should print the
+ansible-vault password on the standard output:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="ch"&gt;#!/bin/sh&lt;/span&gt;
+
+&lt;span class="c1"&gt;# using pass&lt;/span&gt;
+pass pocentek.net/ansible/vault
+
+&lt;span class="c1"&gt;# or using vault&lt;/span&gt;
+vault &lt;span class="nb"&gt;read&lt;/span&gt; -field&lt;span class="o"&gt;=&lt;/span&gt;password secret/pocentek.net/ansible_vault
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p class="first"&gt;Make the script executable:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="gp"&gt;$&lt;/span&gt; chmod +x vault_pass
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p class="first"&gt;Add the following in your &lt;tt class="docutils literal"&gt;ansible.cfg&lt;/tt&gt; file:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="k"&gt;[defaults]&lt;/span&gt;
+&lt;span class="na"&gt;vault_password_file&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s"&gt;./vault_pass&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p class="first"&gt;Run your playbook:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="go"&gt;ansible-playbook your-playbook.yml&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/div&gt;
+&lt;div class="section" id="pass-or-vault-as-external-tool"&gt;
+&lt;h2&gt;Pass or Vault as external tool?&lt;/h2&gt;
+&lt;p&gt;&lt;tt class="docutils literal"&gt;pass&lt;/tt&gt; is really easy to setup and is my tool of choice for personal
+projects. When working with several persons it becomes more complicated to use:&lt;/p&gt;
+&lt;ul class="simple"&gt;
+&lt;li&gt;every user must store the shared password at a predefined path on their local
+machine&lt;/li&gt;
+&lt;li&gt;if the password must be changed every user must update it locally&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;tt class="docutils literal"&gt;vault&lt;/tt&gt; is more complex to setup but offers some nice advantages:&lt;/p&gt;
+&lt;ul class="simple"&gt;
+&lt;li&gt;no need for everyone to store the password locally&lt;/li&gt;
+&lt;li&gt;&lt;tt class="docutils literal"&gt;vault&lt;/tt&gt; supports ACLs. If a user leaves the project, her permissions are
+revoked and the password updated only once on the vault server&lt;/li&gt;
+&lt;li&gt;password changes are easier to handle and can be done more often&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/div&gt;
+</content><category term="ansible"></category><category term="ansible-vault"></category><category term="pass"></category><category term="security"></category></entry><entry><title>Getting started with LXD as an LXC user</title><link href="http://gauvain.pocentek.net/lxd-for-lxc-user.html" rel="alternate"></link><published>2016-11-27T13:33:00+01:00</published><updated>2016-11-27T13:33:00+01:00</updated><author><name>Gauvain Pocentek</name></author><id>tag:gauvain.pocentek.net,2016-11-27:/lxd-for-lxc-user.html</id><summary type="html">&lt;p&gt;I use LXC on my ubuntu workstation quite often. LXD has been out for a while,
+and I tested it to see if I could use it as a direct replacement for LXC. And
+the answer is yes! LXD provides nice management tools that didn't exist in LXC,
+but the …&lt;/p&gt;</summary><content type="html">&lt;p&gt;I use LXC on my ubuntu workstation quite often. LXD has been out for a while,
+and I tested it to see if I could use it as a direct replacement for LXC. And
+the answer is yes! LXD provides nice management tools that didn't exist in LXC,
+but the mechanics are the same.&lt;/p&gt;
+&lt;p&gt;This blog is a recap of what I did to setup a local installation. It assumes
+you already know what is LXC and how to use it.&lt;/p&gt;
+&lt;div class="section" id="some-differences-with-lxc"&gt;
+&lt;h2&gt;Some differences with LXC&lt;/h2&gt;
+&lt;ul class="simple"&gt;
+&lt;li&gt;No more template scripts, LXD uses pre-built images. This has become quite
+common (think Docker/EC2/OpenStack Glance).&lt;/li&gt;
+&lt;li&gt;LXD runs as a daemon and can be managed remotely. If run locally any user in
+the &lt;tt class="docutils literal"&gt;lxd&lt;/tt&gt; group can talk to the daemon. APIs are great.&lt;/li&gt;
+&lt;li&gt;Network management is way simpler, and doesn't require tweaking configuration
+files.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/div&gt;
+&lt;div class="section" id="install-and-configure-lxd"&gt;
+&lt;h2&gt;Install and configure LXD&lt;/h2&gt;
+&lt;p&gt;Ubuntu 16.04 seems to come with LXD installed, but in case it isn't there:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;sudo apt install lxd
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;You can then use the &lt;tt class="docutils literal"&gt;lxd init&lt;/tt&gt; tool to setup the initial configuration:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;sudo lxd init
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;You will have to answer questions about:&lt;/p&gt;
+&lt;ul class="simple"&gt;
+&lt;li&gt;The storage back-end, directory or zfs. The zfs back-end is nice. It uses
+clones and snapshots to optimize performance when creating containers, and
+consumes less disk space.&lt;/li&gt;
+&lt;li&gt;The initial network.&lt;/li&gt;
+&lt;li&gt;The LXD API access: local only or exposed on a network.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;The &lt;tt class="docutils literal"&gt;lxd&lt;/tt&gt; command manages the daemon, use the &lt;tt class="docutils literal"&gt;lxc&lt;/tt&gt; command to manage your
+containers.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class="section" id="create-and-access-containers"&gt;
+&lt;h2&gt;Create and access containers&lt;/h2&gt;
+&lt;p&gt;The containers creation is straightforward:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;lxc launch ubuntu:16.04 c1
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;&lt;tt class="docutils literal"&gt;ubuntu:16.04&lt;/tt&gt; is the reference to an existing container image. If LXD cannot
+find it locally, it will download it from a repository (canonical's by
+default). The image will then be stored locally.&lt;/p&gt;
+&lt;p&gt;The container will be started after creation. Use the &lt;tt class="docutils literal"&gt;list&lt;/tt&gt; or &lt;tt class="docutils literal"&gt;info&lt;/tt&gt;
+subcommands to get information about the new container.&lt;/p&gt;
+&lt;p&gt;You will not be able to access the container using SSH by default:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="gp"&gt;$&lt;/span&gt; ssh ubuntu@10.0.4.242
+&lt;span class="go"&gt;Permission denied (publickey).&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Just like for ubuntu cloud instances the default user doesn't have a password
+set, and you need to use an SSH key to authenticate. An initial setup needs to
+be done. Not handy but should only be done once.&lt;/p&gt;
+&lt;p&gt;To configure your SSH key inside the container use the &lt;tt class="docutils literal"&gt;exec&lt;/tt&gt; subcommand:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="gp"&gt;$&lt;/span&gt; lxc &lt;span class="nb"&gt;exec&lt;/span&gt; c1 /bin/bash
+&lt;span class="gp"&gt;root@c1:~#&lt;/span&gt; &lt;span class="nb"&gt;echo&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;YOU PUBLIC KEY&amp;quot;&lt;/span&gt; &amp;gt; /home/ubuntu/.ssh/authorized_keys
+&lt;span class="gp"&gt;root@c1:~#&lt;/span&gt; &lt;span class="nb"&gt;exit&lt;/span&gt;
+&lt;span class="go"&gt;exit&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Validate that you can access the container:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="gp"&gt;$&lt;/span&gt; ssh ubuntu@10.0.4.242
+&lt;span class="go"&gt;...&lt;/span&gt;
+&lt;span class="gp"&gt;ubuntu@c1:~$&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Congrats!&lt;/p&gt;
+&lt;p&gt;Now you can build a new image that contains you SSH key:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="gp"&gt;$&lt;/span&gt; lxc stop c1
+&lt;span class="gp"&gt;$&lt;/span&gt; lxc publish c1 --alias ubuntu-ssh
+&lt;span class="gp"&gt;$&lt;/span&gt; lxc image list &lt;span class="p"&gt;|&lt;/span&gt; grep ubuntu-ssh
+&lt;span class="gp"&gt;$&lt;/span&gt; lxc launch ubuntu-ssh c2
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class="section" id="what-s-next"&gt;
+&lt;h2&gt;What's next&lt;/h2&gt;
+&lt;p&gt;&lt;a class="reference external" href="https://www.stgraber.org"&gt;Stéphane Graber's blog&lt;/a&gt; contains a lot a very
+interesting articles about LXC/LXD.&lt;/p&gt;
+&lt;p&gt;You can setup DNS resolution in &lt;a class="reference external" href="https://gauvain.pocentek.net/name-resolution-lxc-containers.html"&gt;the same way you might have done for LXC&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;The next step for me will be testing LXD as &lt;a class="reference external" href="https://linuxcontainers.org/lxd/getting-started-openstack/"&gt;OpenStack nova plugin&lt;/a&gt;.&lt;/p&gt;
+&lt;/div&gt;
+</content><category term="lxd"></category><category term="lxc"></category></entry><entry><title>Bye bye Keystone admin token</title><link href="http://gauvain.pocentek.net/rgw-keystone-auth.html" rel="alternate"></link><published>2016-10-23T11:30:00+02:00</published><updated>2016-10-23T11:30:00+02:00</updated><author><name>Gauvain Pocentek</name></author><id>tag:gauvain.pocentek.net,2016-10-23:/rgw-keystone-auth.html</id><summary type="html">&lt;div class="admonition note"&gt;
+&lt;p class="first admonition-title"&gt;Note&lt;/p&gt;
+&lt;p class="last"&gt;This blog assumes that you have already setup a Ceph RadosGW with Keystone
+authentication.&lt;/p&gt;
+&lt;/div&gt;
+&lt;p&gt;The keystone admin token is the old, unsecure and deprecated method to
+authenticate against an OpenStack Identity server. It's been used to bootstrap
+OpenStack users and projects creation, and a good practice was to disable …&lt;/p&gt;</summary><content type="html">&lt;div class="admonition note"&gt;
+&lt;p class="first admonition-title"&gt;Note&lt;/p&gt;
+&lt;p class="last"&gt;This blog assumes that you have already setup a Ceph RadosGW with Keystone
+authentication.&lt;/p&gt;
+&lt;/div&gt;
+&lt;p&gt;The keystone admin token is the old, unsecure and deprecated method to
+authenticate against an OpenStack Identity server. It's been used to bootstrap
+OpenStack users and projects creation, and a good practice was to disable this
+feature completely to avoid bad security surprises.&lt;/p&gt;
+&lt;p&gt;But the Ceph RadosGW documentation for the stable releases - jewel as of this
+writing - clearly states that you need to use this admin token, and that
+there's no other way to connect with Keystone:&lt;/p&gt;
+&lt;ul class="simple"&gt;
+&lt;li&gt;&lt;a class="reference external" href="http://docs.ceph.com/docs/jewel/radosgw/keystone/"&gt;http://docs.ceph.com/docs/jewel/radosgw/keystone/&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="reference external" href="http://docs.ceph.com/docs/jewel/radosgw/config-ref/#keystone-settings"&gt;http://docs.ceph.com/docs/jewel/radosgw/config-ref/#keystone-settings&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Well that's not true.&lt;/p&gt;
+&lt;p&gt;Support for authentication using a service account has been supported in quite
+a while, but never documented. Keystone v3 is also supported since the jewel
+release. The master docs have nice updates:&lt;/p&gt;
+&lt;ul class="simple"&gt;
+&lt;li&gt;&lt;a class="reference external" href="http://docs.ceph.com/docs/master/radosgw/keystone/"&gt;http://docs.ceph.com/docs/master/radosgw/keystone/&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="reference external" href="http://docs.ceph.com/docs/master/radosgw/config-ref/#keystone-settings"&gt;http://docs.ceph.com/docs/master/radosgw/config-ref/#keystone-settings&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;For keystone v3 you can use something like this in your &lt;tt class="docutils literal"&gt;ceph.conf&lt;/tt&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="k"&gt;[client.rgw.HOSTNAME]&lt;/span&gt;
+&lt;span class="na"&gt;rgw keystone url&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s"&gt;http://keystone.host:35357&lt;/span&gt;
+&lt;span class="na"&gt;rgw keystone admin user&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s"&gt;ceph&lt;/span&gt;
+&lt;span class="na"&gt;rgw keystone admin password&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s"&gt;S3Cr3t&lt;/span&gt;
+&lt;span class="na"&gt;rgw keystone admin project&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s"&gt;admin&lt;/span&gt;
+&lt;span class="na"&gt;rgw keystone admin domain&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s"&gt;default&lt;/span&gt;
+&lt;span class="na"&gt;rgw keystone api version&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s"&gt;3&lt;/span&gt;
+&lt;span class="na"&gt;...&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;You need to create a &lt;tt class="docutils literal"&gt;ceph&lt;/tt&gt; service account and give it the &lt;tt class="docutils literal"&gt;admin&lt;/tt&gt; role:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="gp"&gt;$&lt;/span&gt; openstack user create ceph --password-prompt
+&lt;span class="gp"&gt;$&lt;/span&gt; openstack role add --user ceph --project admin admin
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Don't forget to disable the &lt;tt class="docutils literal"&gt;admin_token_auth&lt;/tt&gt; filter from your paste-deploy
+pipeline in &lt;tt class="docutils literal"&gt;&lt;span class="pre"&gt;/etc/keystone/keystone-paste.ini&lt;/span&gt;&lt;/tt&gt;.&lt;/p&gt;
+</content><category term="keystone"></category><category term="ceph"></category><category term="radosgw"></category></entry><entry><title>Creating and using LXC containers with Ansible in-memory inventory</title><link href="http://gauvain.pocentek.net/ansible-to-deploy-lxc-containers.html" rel="alternate"></link><published>2016-10-10T07:22:00+02:00</published><updated>2016-10-10T07:22:00+02:00</updated><author><name>Gauvain Pocentek</name></author><id>tag:gauvain.pocentek.net,2016-10-10:/ansible-to-deploy-lxc-containers.html</id><summary type="html">&lt;div class="section" id="what-we-want-to-do"&gt;
+&lt;h2&gt;What we want to do&lt;/h2&gt;
+&lt;p&gt;Ansible provides an &lt;a class="reference external" href="http://docs.ansible.com/ansible/lxc_container_module.html"&gt;lxc_container&lt;/a&gt; module to manage LXC containers on a remote
+host. It is very handy but once you've deployed a container you need to manage
+applications deployed inside this container. Also with Ansible obviously!&lt;/p&gt;
+&lt;p&gt;A simple approach could be to write a playbook …&lt;/p&gt;&lt;/div&gt;</summary><content type="html">&lt;div class="section" id="what-we-want-to-do"&gt;
+&lt;h2&gt;What we want to do&lt;/h2&gt;
+&lt;p&gt;Ansible provides an &lt;a class="reference external" href="http://docs.ansible.com/ansible/lxc_container_module.html"&gt;lxc_container&lt;/a&gt; module to manage LXC containers on a remote
+host. It is very handy but once you've deployed a container you need to manage
+applications deployed inside this container. Also with Ansible obviously!&lt;/p&gt;
+&lt;p&gt;A simple approach could be to write a playbook to deploy the LXC containers,
+then generate a static inventory, and finally use this inventory with another
+playbook to deploy your final application.&lt;/p&gt;
+&lt;p&gt;An other approach is to have a single playbook. The first play will deploy the
+LXC containers and generate an in-memory inventory using the &lt;a class="reference external" href="http://docs.ansible.com/ansible/add_host_module.html"&gt;add_host&lt;/a&gt; module
+for each container. The &lt;tt class="docutils literal"&gt;lxc_container&lt;/tt&gt; module returns the IP addresses for
+the container (once it's started).&lt;/p&gt;
+&lt;p&gt;If your containers are connected to an internal bridge on the remote host, you
+also need to configure your SSH client to help ansible access them.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class="section" id="an-example-of-how-it-can-be-done"&gt;
+&lt;h2&gt;An example of how it can be done&lt;/h2&gt;
+&lt;p&gt;The example uses the following setup:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;p class="first"&gt;the LXC hosts are listed in the &lt;tt class="docutils literal"&gt;[lxc_hosts]&lt;/tt&gt; group in the inventory&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p class="first"&gt;for each host a list of containers to manage is defined in the &lt;tt class="docutils literal"&gt;containers&lt;/tt&gt;
+variable in a &lt;tt class="docutils literal"&gt;&lt;span class="pre"&gt;host_vars/{{inventory_hostname}}&lt;/span&gt;&lt;/tt&gt; file, with content similar
+to this:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="l l-Scalar l-Scalar-Plain"&gt;containers&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;
+  &lt;span class="p p-Indicator"&gt;-&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;name&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;memcached-1&lt;/span&gt;
+    &lt;span class="l l-Scalar l-Scalar-Plain"&gt;service&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;memcache&lt;/span&gt;
+  &lt;span class="p p-Indicator"&gt;-&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;name&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;mysql-1&lt;/span&gt;
+    &lt;span class="l l-Scalar l-Scalar-Plain"&gt;service&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;mysql&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p class="first"&gt;containers are connected to an &lt;tt class="docutils literal"&gt;lxcbr0&lt;/tt&gt; bridge, on a 10.0.100.0/24 network&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p class="first"&gt;containers are deployed using a custom &lt;tt class="docutils literal"&gt;&lt;span class="pre"&gt;ubuntu-ansible&lt;/span&gt;&lt;/tt&gt; template, based on
+the original &lt;tt class="docutils literal"&gt;ubuntu&lt;/tt&gt; template. The template provides some extra
+configuration steps to ease ansible integration:&lt;/p&gt;
+&lt;ul class="simple"&gt;
+&lt;li&gt;installation of python2.7&lt;/li&gt;
+&lt;li&gt;passwordless sudo configuration&lt;/li&gt;
+&lt;li&gt;injection of an SSH public key&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;You can use the &lt;tt class="docutils literal"&gt;container_command&lt;/tt&gt; argument of the &lt;tt class="docutils literal"&gt;lxc_container&lt;/tt&gt;
+module instead if using a custom template.&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;div class="section" id="sample-playbook"&gt;
+&lt;h3&gt;Sample playbook&lt;/h3&gt;
+&lt;p&gt;The first play creates the containers (if needed), and retrieves the dynamically
+assigned IP addresses of all managed containers:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;-&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;hosts&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;lxc_hosts&lt;/span&gt;
+  &lt;span class="l l-Scalar l-Scalar-Plain"&gt;become&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;true&lt;/span&gt;
+  &lt;span class="l l-Scalar l-Scalar-Plain"&gt;tasks&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;
+  &lt;span class="p p-Indicator"&gt;-&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;name&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;Create the containers&lt;/span&gt;
+    &lt;span class="l l-Scalar l-Scalar-Plain"&gt;lxc_container&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;
+      &lt;span class="l l-Scalar l-Scalar-Plain"&gt;template&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;ubuntu-ansible&lt;/span&gt;
+      &lt;span class="l l-Scalar l-Scalar-Plain"&gt;name&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;{{&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;item.name&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;}}&amp;quot;&lt;/span&gt;
+      &lt;span class="l l-Scalar l-Scalar-Plain"&gt;state&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;started&lt;/span&gt;
+    &lt;span class="l l-Scalar l-Scalar-Plain"&gt;with_items&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;{{&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;containers&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;}}&amp;quot;&lt;/span&gt;
+    &lt;span class="l l-Scalar l-Scalar-Plain"&gt;register&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;containers_info&lt;/span&gt;
+
+  &lt;span class="p p-Indicator"&gt;-&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;name&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;Wait for the network to be setup in the containers&lt;/span&gt;
+    &lt;span class="l l-Scalar l-Scalar-Plain"&gt;when&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;containers_info|changed&lt;/span&gt;
+    &lt;span class="l l-Scalar l-Scalar-Plain"&gt;pause&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;seconds=10&lt;/span&gt;
+
+  &lt;span class="p p-Indicator"&gt;-&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;name&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;Get containers info now that IPs are available&lt;/span&gt;
+    &lt;span class="l l-Scalar l-Scalar-Plain"&gt;lxc_container&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;
+      &lt;span class="l l-Scalar l-Scalar-Plain"&gt;name&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;{{&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;item.name&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;}}&amp;quot;&lt;/span&gt;
+    &lt;span class="l l-Scalar l-Scalar-Plain"&gt;with_items&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;{{&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;containers&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;}}&amp;quot;&lt;/span&gt;
+    &lt;span class="l l-Scalar l-Scalar-Plain"&gt;register&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;containers_info&lt;/span&gt;
+
+  &lt;span class="p p-Indicator"&gt;-&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;name&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;Register the hosts in the inventory&lt;/span&gt;
+    &lt;span class="l l-Scalar l-Scalar-Plain"&gt;add_host&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;
+      &lt;span class="l l-Scalar l-Scalar-Plain"&gt;name&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;{{&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;item.lxc_container.ips.0&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;}}&amp;quot;&lt;/span&gt;
+      &lt;span class="l l-Scalar l-Scalar-Plain"&gt;group&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;{{&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;item.item.service&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;}}&amp;quot;&lt;/span&gt;
+    &lt;span class="l l-Scalar l-Scalar-Plain"&gt;with_items&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;{{&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;containers_info.results&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;}}&amp;quot;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The following plays use the newly added groups and hosts:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;-&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;hosts&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;memcache&lt;/span&gt;
+  &lt;span class="l l-Scalar l-Scalar-Plain"&gt;become&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;true&lt;/span&gt;
+  &lt;span class="l l-Scalar l-Scalar-Plain"&gt;tasks&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;
+  &lt;span class="p p-Indicator"&gt;-&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;debug&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;msg=&amp;quot;memcached deployment&amp;quot;&lt;/span&gt;
+
+&lt;span class="p p-Indicator"&gt;-&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;hosts&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;mysql&lt;/span&gt;
+  &lt;span class="l l-Scalar l-Scalar-Plain"&gt;become&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;true&lt;/span&gt;
+  &lt;span class="l l-Scalar l-Scalar-Plain"&gt;tasks&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;
+  &lt;span class="p p-Indicator"&gt;-&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;debug&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;msg=&amp;quot;mysql deployment&amp;quot;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class="section" id="ssh-client-configuration"&gt;
+&lt;h3&gt;SSH client configuration&lt;/h3&gt;
+&lt;p&gt;In the example setup Ansible can't reach the created containers because they
+are connected on an isolated network. This can be dealt with an ssh
+configuration in &lt;tt class="docutils literal"&gt;&lt;span class="pre"&gt;~/.ssh/config&lt;/span&gt;&lt;/tt&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;Host lxc1
+    Hostname lxc1.domain.com
+    User localadmin
+
+Host 10.0.100.*
+    User ubuntu
+    ForwardAgent yes
+    ProxyCommand ssh -q lxc1 nc %h %p
+    StrictHostKeyChecking no
+    UserKnownHostsFile=/dev/null
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class="section" id="final-word"&gt;
+&lt;h2&gt;Final word&lt;/h2&gt;
+&lt;p&gt;Although this example deploys LXC containers, the same process can be used for
+any type of VM/container deployment: EC2, OpenStack, GCE, Azure or any other
+platform.&lt;/p&gt;
+&lt;/div&gt;
+</content><category term="ansible"></category><category term="lxc"></category></entry><entry><title>Name resolution for LXC containers</title><link href="http://gauvain.pocentek.net/name-resolution-lxc-containers.html" rel="alternate"></link><published>2016-09-18T13:02:00+02:00</published><updated>2016-09-18T13:02:00+02:00</updated><author><name>Gauvain Pocentek</name></author><id>tag:gauvain.pocentek.net,2016-09-18:/name-resolution-lxc-containers.html</id><summary type="html">&lt;p&gt;I use LXC containers on my laptop for testing purpose quite a lot. I create, I
+destroy, I recreate. LXC is easy to use for this purpose, but one thing was
+missing on my setup: the automatic creation of a DNS record.&lt;/p&gt;
+&lt;p&gt;The &lt;tt class="docutils literal"&gt;&lt;span class="pre"&gt;lxc-net&lt;/span&gt;&lt;/tt&gt; script used on Ubuntu to create …&lt;/p&gt;</summary><content type="html">&lt;p&gt;I use LXC containers on my laptop for testing purpose quite a lot. I create, I
+destroy, I recreate. LXC is easy to use for this purpose, but one thing was
+missing on my setup: the automatic creation of a DNS record.&lt;/p&gt;
+&lt;p&gt;The &lt;tt class="docutils literal"&gt;&lt;span class="pre"&gt;lxc-net&lt;/span&gt;&lt;/tt&gt; script used on Ubuntu to create the default &lt;tt class="docutils literal"&gt;lxcbr0&lt;/tt&gt; bridge
+provides almost everything to make this possible without too much effort.&lt;/p&gt;
+&lt;p&gt;The steps to set this up are:&lt;/p&gt;
+&lt;ol class="arabic"&gt;
+&lt;li&gt;&lt;p class="first"&gt;Update &lt;tt class="docutils literal"&gt;&lt;span class="pre"&gt;/etc/default/lxc-net&lt;/span&gt;&lt;/tt&gt; to define a domain. This domain will be
+managed by the same &lt;tt class="docutils literal"&gt;dnsmasq&lt;/tt&gt; process that already serves as DHCP server
+for the LXC containers.&lt;/p&gt;
+&lt;p&gt;Sample configuration:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;USE_LXC_BRIDGE=&amp;quot;true&amp;quot;
+LXC_BRIDGE=&amp;quot;lxcbr0&amp;quot;
+LXC_ADDR=&amp;quot;10.0.3.1&amp;quot;
+LXC_NETMASK=&amp;quot;255.255.255.0&amp;quot;
+LXC_NETWORK=&amp;quot;10.0.3.0/24&amp;quot;
+LXC_DHCP_RANGE=&amp;quot;10.0.3.2,10.0.3.254&amp;quot;
+LXC_DHCP_MAX=&amp;quot;253&amp;quot;
+# This is the domain name definition
+LXC_DOMAIN=&amp;quot;lxc&amp;quot;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p class="first"&gt;Restart the service:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="gp"&gt;$&lt;/span&gt; sudo service lxc-net restart
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p class="first"&gt;Validate that the dnsmasq process can resolve a running container IP:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="gp"&gt;$&lt;/span&gt; dig @10.0.3.1 container_name.lxc
+&lt;span class="go"&gt;...&lt;/span&gt;
+&lt;span class="go"&gt;;; ANSWER SECTION:&lt;/span&gt;
+&lt;span class="go"&gt;container_name.lxc.       0       IN      A       10.0.3.156&lt;/span&gt;
+&lt;span class="go"&gt;...&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;A nice bonus is that the dns configuration inside a newly started container
+allows short name resolution:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="gp"&gt;$&lt;/span&gt; sudo lxc-start -n other_container
+&lt;span class="gp"&gt;$&lt;/span&gt; sleep &lt;span class="m"&gt;10&lt;/span&gt;
+&lt;span class="gp"&gt;$&lt;/span&gt; sudo lxc-attach -n other_container -- ping -c &lt;span class="m"&gt;2&lt;/span&gt; container_name
+&lt;span class="go"&gt;PING container_name (10.0.3.220) 56(84) bytes of data.&lt;/span&gt;
+&lt;span class="go"&gt;64 bytes from container_name.lxc (10.0.3.220): icmp_seq=1 ttl=64 time=0.039 ms&lt;/span&gt;
+&lt;span class="go"&gt;64 bytes from container_name.lxc (10.0.3.220): icmp_seq=2 ttl=64 time=0.046 ms&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;To make this setup really usable the host must be configured to redirect DNS
+queries to the LXC-related dnsmasq process. By default Ubuntu configures
+&lt;tt class="docutils literal"&gt;/etc/resolv.conf&lt;/tt&gt; to use &lt;tt class="docutils literal"&gt;127.0.1.1&lt;/tt&gt; as DNS resolver. A &lt;tt class="docutils literal"&gt;dnsmasq&lt;/tt&gt;
+process takes care of forwarding the requests to the proper authoritative DNS.&lt;/p&gt;
+&lt;p&gt;To setup the forwarding, add the following line to &lt;tt class="docutils literal"&gt;/etc/dnsmasq.d/lxc&lt;/tt&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;server=/lxc/10.0.3.1
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;If you're running a desktop version of Ubuntu, you probably use Network
+Manager. Symlink this configuration file to
+&lt;tt class="docutils literal"&gt;/etc/NetworkManager/dnsmasq.d/lxc&lt;/tt&gt; and restart Network Manager:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="gp"&gt;$&lt;/span&gt; sudo ln -s /etc/dnsmasq.d/lxc /etc/NetworkManager/dnsmasq.d/
+&lt;span class="gp"&gt;$&lt;/span&gt; sudo service network-manager restart
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;DNS resolution should now work on your host:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="gp"&gt;$&lt;/span&gt; dig container_name.lxc
+&lt;span class="go"&gt;...&lt;/span&gt;
+&lt;span class="go"&gt;;; ANSWER SECTION:&lt;/span&gt;
+&lt;span class="go"&gt;container_name.lxc.   0   IN  A   10.0.3.156&lt;/span&gt;
+&lt;span class="go"&gt;...&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+</content><category term="lxc"></category><category term="dns"></category></entry><entry><title>python-gitlab 0.14</title><link href="http://gauvain.pocentek.net/python-gitlab-014.html" rel="alternate"></link><published>2016-08-07T22:52:00+02:00</published><updated>2016-08-07T22:52:00+02:00</updated><author><name>Gauvain Pocentek</name></author><id>tag:gauvain.pocentek.net,2016-08-07:/python-gitlab-014.html</id><summary type="html">&lt;p&gt;It's been a while since the 0.13 release of &lt;a class="reference external" href="`python-gitlabhttp://github.com/gpocentek/python-gitlab`"&gt;python-gitlab&lt;/a&gt;. For the 0.14
+release I spent some time writing code examples to make the first steps of
+using the API easier. All the objects are not yet documented, but since there's
+been a lot of new features and …&lt;/p&gt;</summary><content type="html">&lt;p&gt;It's been a while since the 0.13 release of &lt;a class="reference external" href="`python-gitlabhttp://github.com/gpocentek/python-gitlab`"&gt;python-gitlab&lt;/a&gt;. For the 0.14
+release I spent some time writing code examples to make the first steps of
+using the API easier. All the objects are not yet documented, but since there's
+been a lot of new features and some bug fixes I wanted to get things out there.&lt;/p&gt;
+&lt;p&gt;python-gitlab is a python package and a &lt;tt class="docutils literal"&gt;gitlab&lt;/tt&gt; CLI to interact with the
+&lt;a class="reference external" href="https://gitlab.com"&gt;Gitlab&lt;/a&gt; API.&lt;/p&gt;
+&lt;p&gt;To install the 0.14 version using pip:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;pip install --upgrade python-gitlab
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Download the tarballs on pypi:
+&lt;a class="reference external" href="https://pypi.python.org/pypi/python-gitlab"&gt;https://pypi.python.org/pypi/python-gitlab&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;Documentation is available on read the docs:
+&lt;a class="reference external" href="http://python-gitlab.readthedocs.io/en/stable/"&gt;http://python-gitlab.readthedocs.io/en/stable/&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;Report bugs and send pull request on github, contributions are very welcome:
+&lt;a class="reference external" href="http://github.com/gpocentek/python-gitlab"&gt;http://github.com/gpocentek/python-gitlab&lt;/a&gt;&lt;/p&gt;
+</content><category term="python"></category><category term="gitlab"></category><category term="python-gitlab"></category></entry><entry><title>Ansible: writing a module to deal with complex variables setup</title><link href="http://gauvain.pocentek.net/ansible-module-for-variables.html" rel="alternate"></link><published>2016-03-16T12:38:00+01:00</published><updated>2016-03-16T12:38:00+01:00</updated><author><name>Gauvain Pocentek</name></author><id>tag:gauvain.pocentek.net,2016-03-16:/ansible-module-for-variables.html</id><summary type="html">&lt;div class="section" id="the-problem"&gt;
+&lt;h2&gt;The problem&lt;/h2&gt;
+&lt;p&gt;Ansible playbooks that can deploy applications in multiple contexts (for
+example a 1-node setup for tests, and multi-node setup with HA for production)
+might have to deal with rather complex variable definitions. The templating
+system provided by Ansible is a great help, but it can be difficult and …&lt;/p&gt;&lt;/div&gt;</summary><content type="html">&lt;div class="section" id="the-problem"&gt;
+&lt;h2&gt;The problem&lt;/h2&gt;
+&lt;p&gt;Ansible playbooks that can deploy applications in multiple contexts (for
+example a 1-node setup for tests, and multi-node setup with HA for production)
+might have to deal with rather complex variable definitions. The templating
+system provided by Ansible is a great help, but it can be difficult and very
+verbose to use it sometimes.&lt;/p&gt;
+&lt;p&gt;I recently had to solve a simple problem. Depending on the installation node of
+the HAProxy load balancer, the 15 balanced services had to listen on different
+ports to avoid conflicts.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class="section" id="one-solution"&gt;
+&lt;h2&gt;One solution&lt;/h2&gt;
+&lt;p&gt;Instead of computing the selected port using the template system, I chose to
+develop a module that would set the chosen ports as a fact on every target. The
+module is called once at the beginning of the playbook, and the ports are
+available as a variable in all the tasks.&lt;/p&gt;
+&lt;div class="section" id="the-module"&gt;
+&lt;h3&gt;The module&lt;/h3&gt;
+&lt;p&gt;The module takes one mandatory boolean argument, &lt;tt class="docutils literal"&gt;with_haproxy&lt;/tt&gt;.&lt;/p&gt;
+&lt;p&gt;The implementation looks like this (&lt;tt class="docutils literal"&gt;library/get_ports.py&lt;/tt&gt;):&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="n"&gt;INTERNAL&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;service1&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="mi"&gt;11001&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;service2&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="mi"&gt;11002&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;span class="n"&gt;PUBLIC&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;service1&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="mi"&gt;1001&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;service2&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="mi"&gt;1002&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;
+
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;main&lt;/span&gt;&lt;span class="p"&gt;():&lt;/span&gt;
+    &lt;span class="n"&gt;module&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;AnsibleModule&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+        &lt;span class="n"&gt;argument_spec&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;dict&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+            &lt;span class="n"&gt;with_haproxy&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;dict&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;type&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;bool&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;required&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="bp"&gt;True&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="p"&gt;)&lt;/span&gt;
+
+    &lt;span class="n"&gt;with_haproxy&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;module&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;params&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;with_haproxy&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+    &lt;span class="n"&gt;ports&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;public&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;PUBLIC&lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;
+    &lt;span class="n"&gt;ports&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;internal&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;INTERNAL&lt;/span&gt; &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;with_haproxy&lt;/span&gt; &lt;span class="k"&gt;else&lt;/span&gt; &lt;span class="n"&gt;PUBLIC&lt;/span&gt;
+
+    &lt;span class="n"&gt;module&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;exit_json&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;changed&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="bp"&gt;False&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;success&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+                     &lt;span class="n"&gt;ansible_facts&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;ports&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;ports&lt;/span&gt;&lt;span class="p"&gt;})&lt;/span&gt;
+
+    &lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;ansible.module_utils.basic&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt;
+    &lt;span class="n"&gt;main&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The &lt;tt class="docutils literal"&gt;ansible_facts&lt;/tt&gt; argument name is important, it will tell ansible to
+register this variable as a fact, so you don't need to use the &lt;tt class="docutils literal"&gt;register&lt;/tt&gt;
+attribute in your task.&lt;/p&gt;
+&lt;p&gt;The &lt;tt class="docutils literal"&gt;ports&lt;/tt&gt; dict holds the ports information for public and internal access.
+The &lt;tt class="docutils literal"&gt;ports.internal&lt;/tt&gt; dict is used to configure the services ports. If HAProxy
+is used, they have custom (&lt;tt class="docutils literal"&gt;INTERNAL&lt;/tt&gt;) ports to avoid conflicting with
+HAProxy. Otherwise they use the official (&lt;tt class="docutils literal"&gt;PUBLIC&lt;/tt&gt;) port.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class="section" id="the-playbook"&gt;
+&lt;h3&gt;The playbook&lt;/h3&gt;
+&lt;p&gt;To register the facts, the first task of the playbook looks like this:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;-&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;name&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;Register ports&lt;/span&gt;
+  &lt;span class="l l-Scalar l-Scalar-Plain"&gt;local_action&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;
+    &lt;span class="l l-Scalar l-Scalar-Plain"&gt;module&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;get_ports&lt;/span&gt;
+    &lt;span class="l l-Scalar l-Scalar-Plain"&gt;with_haproxy&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;true|false&lt;/span&gt;
+
+&lt;span class="p p-Indicator"&gt;-&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;debug&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;var=ports.internal.service1&lt;/span&gt;
+&lt;span class="p p-Indicator"&gt;-&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;debug&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt; &lt;span class="l l-Scalar l-Scalar-Plain"&gt;var=ports.internal.service2&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The &lt;tt class="docutils literal"&gt;local_action&lt;/tt&gt; module avoids a useless connection to the targets.&lt;/p&gt;
+&lt;div class="admonition note"&gt;
+&lt;p class="first admonition-title"&gt;Note&lt;/p&gt;
+&lt;p class="last"&gt;If you have not written modules for Ansible yet, have a look at &lt;a class="reference external" href="http://docs.ansible.com/ansible/developing_modules.html"&gt;the
+tutorial&lt;/a&gt;. They
+can be written in any language, although using Python makes things a lot
+easier.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+</content><category term="ansible"></category><category term="python"></category></entry><entry><title>Going static</title><link href="http://gauvain.pocentek.net/going-static.html" rel="alternate"></link><published>2016-03-16T12:37:00+01:00</published><updated>2016-03-16T12:37:00+01:00</updated><author><name>Gauvain Pocentek</name></author><id>tag:gauvain.pocentek.net,2016-03-16:/going-static.html</id><summary type="html">&lt;p&gt;After several years of dealing with Drupal 6 I made the switch to a static site
+generator for this web space. Several reasons:&lt;/p&gt;
+&lt;ul class="simple"&gt;
+&lt;li&gt;Updating Drupal is a pain&lt;/li&gt;
+&lt;li&gt;Switching to Drupal 7 didn't work out of the box, and I didn't want to spend
+days on this&lt;/li&gt;
+&lt;li&gt;The content editor …&lt;/li&gt;&lt;/ul&gt;</summary><content type="html">&lt;p&gt;After several years of dealing with Drupal 6 I made the switch to a static site
+generator for this web space. Several reasons:&lt;/p&gt;
+&lt;ul class="simple"&gt;
+&lt;li&gt;Updating Drupal is a pain&lt;/li&gt;
+&lt;li&gt;Switching to Drupal 7 didn't work out of the box, and I didn't want to spend
+days on this&lt;/li&gt;
+&lt;li&gt;The content editor is web/html/wiki-style based, I prefer a simple text-based
+editor&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;There's a lot of static site generators out there, I had a few criteria to help
+me decide which one to used:&lt;/p&gt;
+&lt;ul class="simple"&gt;
+&lt;li&gt;Open Source&lt;/li&gt;
+&lt;li&gt;Possibility to write articles in RST rather than MD&lt;/li&gt;
+&lt;li&gt;Written in python so I can easily modify the behovior if needed&lt;/li&gt;
+&lt;li&gt;Theming support, and multiple themes available - HTML/CSS is not my strong
+suit&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;The tool that seemed to best fit my needs was &lt;a class="reference external" href="http://pelican.com"&gt;pelican&lt;/a&gt; so I gave it a go, and
+it worked very well for what I wanted to do.&lt;/p&gt;
+&lt;p&gt;I use a couple plugins to handle the documentation pages and the
+&lt;tt class="docutils literal"&gt;sitemap.xml&lt;/tt&gt; generation, and the theme is based on &lt;a class="reference external" href="https://github.com/getpelican/pelican-themes/tree/master/new-bootstrap2"&gt;new-bootstrap2&lt;/a&gt; with
+some simple modifications.&lt;/p&gt;
+&lt;p&gt;I now edit this web space with &lt;a class="reference external" href="http://www.vim.org"&gt;vim&lt;/a&gt; and publish with &lt;a class="reference external" href="http://www.ansible.com"&gt;ansible&lt;/a&gt;, I feel at home!&lt;/p&gt;
+</content><category term="rst"></category><category term="pelican"></category><category term="website"></category></entry><entry><title>The end of Medibuntu</title><link href="http://gauvain.pocentek.net/end-of-medibuntu.html" rel="alternate"></link><published>2013-09-11T16:21:00+02:00</published><updated>2013-09-11T16:21:00+02:00</updated><author><name>Gauvain Pocentek</name></author><id>tag:gauvain.pocentek.net,2013-09-11:/end-of-medibuntu.html</id><summary type="html">&lt;p&gt;Medibuntu is going down.&lt;/p&gt;
+&lt;p&gt;The project is not really needed nowadays, except for one package: libdvdcss.
+This package is now maintained by Jonathan Riddell at &lt;a class="reference external" href="http://www.blue-systems.de/"&gt;Blue Systems&lt;/a&gt;. It is available in a &lt;a class="reference external" href="ftp://ftp.videolan.org/pub/debian"&gt;repository hosted by
+VideoLAN&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;To disable the Medibuntu repository and enable the libdvdcss one, use these
+commands:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="go"&gt;sudo …&lt;/span&gt;&lt;/pre&gt;&lt;/div&gt;</summary><content type="html">&lt;p&gt;Medibuntu is going down.&lt;/p&gt;
+&lt;p&gt;The project is not really needed nowadays, except for one package: libdvdcss.
+This package is now maintained by Jonathan Riddell at &lt;a class="reference external" href="http://www.blue-systems.de/"&gt;Blue Systems&lt;/a&gt;. It is available in a &lt;a class="reference external" href="ftp://ftp.videolan.org/pub/debian"&gt;repository hosted by
+VideoLAN&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;To disable the Medibuntu repository and enable the libdvdcss one, use these
+commands:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="go"&gt;sudo rm /etc/apt/sources.list.d/medibuntu.list&lt;/span&gt;
+&lt;span class="go"&gt;curl ftp://ftp.videolan.org/pub/debian/videolan-apt.asc | sudo apt-key add -&lt;/span&gt;
+&lt;span class="go"&gt;echo &amp;quot;deb ftp://ftp.videolan.org/pub/debian/stable ./&amp;quot; | sudo tee /etc/apt/sources.list.d/libdvdcss.list&lt;/span&gt;
+&lt;span class="go"&gt;sudo apt-get update&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;If you are using Ubuntu saucy, you can also install libdvdcss using &lt;a class="reference external" href="https://help.ubuntu.com/community/RestrictedFormats#Addlibdvdccs"&gt;an
+alternative method&lt;/a&gt; (make sure
+to install/upgrade the &lt;tt class="docutils literal"&gt;libdvdread4&lt;/tt&gt; package first).&lt;/p&gt;
+&lt;p&gt;I'll keep the repository online for now, at least until the Ubuntu 13.10
+release. Expect the repository to be down after that. An iso image of the
+current state of the repository &lt;cite&gt;is available
+&amp;lt;http://archive.pocentek.net/medibuntu/&amp;gt;&lt;/cite&gt;.&lt;/p&gt;
+&lt;p&gt;I recommend to disable the repository if you are currently using it.&lt;/p&gt;
+&lt;p&gt;Thanks to all the persons who contributed to the project (package maintainers,
+servers admins, ...).&lt;/p&gt;
+</content><category term="medibuntu"></category><category term="vlc"></category></entry></feed>

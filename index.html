@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>gpocentek's webspace</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="keywords" content="" />
+    <meta name="author" content="Gauvain Pocentek" />
+    <meta name="kittycheck_rumble" content="true" />
+    <meta name="kittycheck_position" content="top=60,right=60" />
+
+    <!-- Le styles -->
+    <link rel="stylesheet" href="./theme/css/bootstrap.min.css" type="text/css" />
+    <style type="text/css">
+      body {
+        padding-top: 60px;
+        padding-bottom: 40px;
+      }
+      .sidebar-nav {
+        padding: 9px 0;
+      }
+      .tag-1 {
+        font-size: 13pt;
+      }
+      .tag-2 {
+        font-size: 10pt;
+      }
+      .tag-2 {
+        font-size: 8pt;
+      }
+      .tag-4 {
+        font-size: 6pt;
+     }
+    </style>
+    <link href="./theme/css/bootstrap-responsive.min.css" rel="stylesheet">
+    <link href="./theme/css/font-awesome.css" rel="stylesheet">
+    <link href="./theme/css/pygments.css" rel="stylesheet">
+    <link href="./theme/css/local.css" rel="stylesheet">
+
+    <!-- Le HTML5 shim, for IE6-8 support of HTML5 elements -->
+    <!--[if lt IE 9]>
+      <script src="//html5shim.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+
+    <!-- Le fav and touch icons -->
+    <link rel="shortcut icon" href="./theme/img/favicon.ico">
+    <link rel="apple-touch-icon" href="./theme/img/apple-touch-icon.png">
+    <link rel="apple-touch-icon" sizes="72x72" href="./theme/img/apple-touch-icon-72x72.png">
+    <link rel="apple-touch-icon" sizes="114x114" href="./theme/img/apple-touch-icon-114x114.png">
+
+    <link href="./" type="application/atom+xml" rel="alternate" title="gpocentek's webspace ATOM Feed" />
+  </head>
+  <body>
+    <div class="navbar navbar-fixed-top">
+      <div class="navbar-inner">
+        <div class="container-fluid">
+          <a class="btn btn-navbar" data-toggle="collapse" data-target=".nav-collapse">
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+          </a>
+          <a class="brand" href="./index.html"><strong>gpocentek's webspace</strong> &ndash;  Random dev & ops notes</a>
+          <div class="nav-collapse">
+            <ul class="nav">
+            </ul>
+            <!--<p class="navbar-text pull-right">Logged in as <a href="#">username</a></p>-->
+          </div><!--/.nav-collapse -->
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      <div class="row">
+        <div class="span8" id="content">
+<div class="row">
+    <div class="span8">
+        <div class="article well">
+            <article>
+                <header>
+                    <h1><a href="./openshift-single-node.html">OpenShift Origin on a single node</a></h1>
+<a href="./tag/openshift.html" class="label"><i class="icon-tag"></i>&nbsp;openshift</a>
+<a href="./tag/ansible.html" class="label"><i class="icon-tag"></i>&nbsp;ansible</a>
+                    <abbr class="published pull-right" title="2017-12-09T18:00:00+01:00">
+                        <i class="icon-calendar"></i>&nbsp;lör 09 december 2017
+                    </abbr>
+                </header>
+            </article>
+            <div class="summary"><p>I needed to deploy an OpenShift Origin instance for testing purposes. This
+article describes how I used <cite>openshift-ansible</cite> to deploy the software.</p>
+<div class="section" id="existing-tools">
+<h2>Existing tools</h2>
+<p>There are several solutions to do this:</p>
+<ul class="simple">
+<li>you can use <a class="reference external" href="https://docs.openshift.org/latest/minishift/index.html">minishift</a></li>
+<li>or you can deploy an all-in-one server using <a class="reference external" href="https://docs.openshift.org/latest/getting_started/administrators.html#running-in-a-docker-container">a container</a>
+or <a class="reference external" href="https://docs.openshift.org/latest/getting_started/administrators.html#downloading-the-binary">a single binary</a></li>
+</ul>
+<p>These solutions work fine but provide a limited set of features by default.</p>
+</div>
+<div class="section" id="environment">
+<h2>Environment</h2>
+<p>I used a x86 physical server for the deployment:</p>
+<ul class="simple">
+<li>8 cores</li>
+<li>32G RAM</li>
+<li>2 x 1T disks</li>
+</ul>
+<p>OpenShift and the ansible playbook only support RedHat-like distributions. I
+used a minimal CentOS 7.4 installation without SELinux, and without firewalld.</p>
+<p>The machine DNS name is <tt class="docutils literal">op1.pocentek.net</tt>.</p>
+<div class="section" id="docker-setup">
+<h3>Docker setup</h3>
+<p>The OpenShift playbook requires a working docker-engine installation on the
+target host. For better performance OpenShift recommends to use the <cite>overlay2</cite>
+storage driver. This driver requires an XFS filesystem.</p>
+<p>Docker installation steps:</p>
+<div class="highlight"><pre><span></span><span class="gp">#</span> mkfs.xfs /dev/sdb1  <span class="c1"># dedicated disk for docker in this setup</span>
+<span class="gp">#</span> mkdir /var/lib/docker
+<span class="gp">#</span> <span class="nb">echo</span> <span class="s1">&#39;/dev/sdb1 /var/lib/docker xfs defaults 0 0&#39;</span> &gt;&gt; /etc/fstab
+<span class="gp">#</span> mount -a
+<span class="gp">#</span> yum install -y docker
+<span class="gp">#</span> <span class="nb">echo</span> <span class="s1">&#39;{&quot;storage-driver&quot;: &quot;overlay2&quot;}&#39;</span> &gt; /etc/docker/daemon.json
+<span class="gp">#</span> systemctl <span class="nb">enable</span> docker.service
+<span class="gp">#</span> systemctl start docker.service
+<span class="gp">#</span> docker ps  <span class="c1"># make sure you can talk to the docker daemon</span>
+</pre></div>
+</div>
+<div class="section" id="dns-setup">
+<h3>DNS setup</h3>
+<p>To benefit from OpenShift routing feature I defined a wildcard A entry in the
+<tt class="docutils literal">pocentek.net</tt> DNS zone:</p>
+<div class="highlight"><pre><span></span>*.oc.pocentek.net. IN A 12.34.56.78
+</pre></div>
+<p>This allows dynamic resolution for all the application deployed on OpenShift,
+as long as they are routed using a matching domain name.</p>
+</div>
+</div>
+<div class="section" id="playbook-configuration">
+<h2>Playbook configuration</h2>
+<p>The OpenShift playbook requires only a few variables to be set to perform the
+installation. But a single node setup requires a few tweaks.</p>
+<p>You first need to retrieve the code. I used the 3.6 version of OpenShift if
+this example:</p>
+<div class="highlight"><pre><span></span><span class="gp">$</span> git clone https://github.com/openshift/openshift-ansible.git
+<span class="gp">$</span> <span class="nb">cd</span> openshift-ansible
+<span class="gp">$</span> git checkout --track origin/release-3.6
+</pre></div>
+<p>All the settings are defined in an inventory file. I used the following
+<tt class="docutils literal">inventory/hosts</tt> file:</p>
+<div class="highlight"><pre><span></span><span class="k">[OSEv3:children]</span>
+<span class="na">masters</span>
+<span class="na">nodes</span>
+<span class="na">etcd</span>
+
+<span class="k">[masters]</span>
+<span class="na">op1.pocentek.net openshift_public_hostname</span><span class="o">=</span><span class="s">&quot;{{ inventory_hostname }}&quot; openshift_hostname=&quot;{{ ansible_default_ipv4.address }}&quot;</span>
+
+<span class="k">[etcd]</span>
+<span class="na">op1.pocentek.net</span>
+
+<span class="k">[nodes]</span>
+<span class="na">op1.pocentek.net openshift_node_labels</span><span class="o">=</span><span class="s">&quot;{&#39;region&#39;: &#39;primary&#39;, &#39;zone&#39;: &#39;default&#39;}&quot; openshift_schedulable=true</span>
+
+<span class="k">[OSEv3:vars]</span>
+<span class="na">ansible_ssh_user</span><span class="o">=</span><span class="s">root</span>
+<span class="na">ansible_become</span><span class="o">=</span><span class="s">no</span>
+
+<span class="na">openshift_deployment_type</span><span class="o">=</span><span class="s">origin</span>
+<span class="na">openshift_release</span><span class="o">=</span><span class="s">v3.6</span>
+
+<span class="na">openshift_master_default_subdomain</span><span class="o">=</span><span class="s">oc.pocentek.net</span>
+
+<span class="na">openshift_master_identity_providers</span><span class="o">=</span><span class="s">[{&#39;name&#39;: &#39;htpasswd_auth&#39;, &#39;login&#39;: &#39;true&#39;, &#39;challenge&#39;: &#39;true&#39;, &#39;kind&#39;: &#39;HTPasswdPasswordIdentityProvider&#39;, &#39;filename&#39;: &#39;/etc/origin/master/htpasswd&#39;}]</span>
+<span class="na">openshift_master_htpasswd_users</span><span class="o">=</span><span class="s">{&#39;gpocentek&#39;: &#39;some_htpasswd_encrypted_passwd&#39;}</span>
+
+<span class="na">openshift_hosted_router_replicas</span><span class="o">=</span><span class="s">1</span>
+<span class="na">openshift_hosted_registry_replicas</span><span class="o">=</span><span class="s">1</span>
+
+<span class="na">openshift_router_selector</span><span class="o">=</span><span class="s">&#39;region=primary&#39;</span>
+<span class="na">openshift_registry_selector</span><span class="o">=</span><span class="s">&#39;region=primary&#39;</span>
+</pre></div>
+<p>Some variables require a bit of explanation:</p>
+<dl class="docutils">
+<dt>openshift_schedulable=true</dt>
+<dd>By default a master node will be configured to be ignored by the OpenShift
+scheduler. Application containers will not be created on masters. Since we
+only have one node, the master should be configured to host application
+containers.</dd>
+<dt>openshift_router_selector and openshift_registry_selector</dt>
+<dd><p class="first">Routers (which expose services to the outside world) and the docker
+registry both run as containers on one or several nodes of the OpenShift
+cluster. By default they run on infrastructure nodes: dedicated nodes
+hosting internal services. To make sure that these services are properly
+scheduled and started on the single node deployment we explicitly label the
+node (<tt class="docutils literal">region: primay</tt>) and configure the router and registry selector to
+match this node.</p>
+<p class="last">We also make sure that only 1 container is scheduled for each service
+(<tt class="docutils literal">openshift_hosted_{router,registry}_replicas</tt>).</p>
+</dd>
+<dt>openshift_master_htpasswd_users</dt>
+<dd>In this setup htpasswd authentication is used, and a <tt class="docutils literal">gpocentek</tt> user is
+created by the playbook. You can generate the encrypted password using the
+<tt class="docutils literal">htpasswd</tt> tool.</dd>
+</dl>
+<p>The node can be deployed using:</p>
+<div class="highlight"><pre><span></span><span class="gp">$</span> ansible-playbook -i inventory/hosts playbooks/byo/config.yml
+</pre></div>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">Note: you can find sample inventories in <tt class="docutils literal">inventory/byo/</tt>.</p>
+</div>
+</div>
+<div class="section" id="storage">
+<h2>Storage</h2>
+<p>One feature I couldn't manage to deploy is persistent storage support. Since
+the deployment isn't meant for production, I used a NFS server deployed on the
+OpenShift machine to provide PVs:</p>
+<div class="highlight"><pre><span></span><span class="k">for</span> i in <span class="o">{</span><span class="m">1</span>..9<span class="o">}</span><span class="p">;</span> <span class="k">do</span>
+    mkdir -p /exports/volumes/vol0<span class="nv">$i</span>
+    chown nfsnobody:nfsnobody /exports/volumes/vol0<span class="nv">$i</span>
+    chmod <span class="m">775</span> /exports/volumes/vol0<span class="nv">$i</span>
+    <span class="nb">echo</span> <span class="s2">&quot;/exports/volumes/vol0</span><span class="nv">$i</span><span class="s2"> *(rw,root_squash,no_wdelay)&quot;</span> &gt;&gt; /etc/exports
+
+    cat <span class="p">|</span> oc create -f - <span class="s">&lt;&lt; EOF</span>
+<span class="s">    apiVersion: v1</span>
+<span class="s">    kind: PersistentVolume</span>
+<span class="s">    metadata:</span>
+<span class="s">      name: pv0$i</span>
+<span class="s">    spec:</span>
+<span class="s">      capacity:</span>
+<span class="s">        storage: 5Gi</span>
+<span class="s">      accessModes:</span>
+<span class="s">        - ReadWriteOnce</span>
+<span class="s">      nfs:</span>
+<span class="s">        path: /exports/volumes/vol0$i</span>
+<span class="s">        server: 172.17.0.1</span>
+<span class="s">      persistentVolumeReclaimPolicy: Recycle</span>
+<span class="s">    EOF</span>
+<span class="k">done</span>
+</pre></div>
+<p>Containers using PVCs created using these PVs most define a custom
+<tt class="docutils literal">securityContext</tt>:</p>
+<div class="highlight"><pre><span></span><span class="l l-Scalar l-Scalar-Plain">securityContext</span><span class="p p-Indicator">:</span>
+  <span class="l l-Scalar l-Scalar-Plain">supplementalGroups</span><span class="p p-Indicator">:</span> <span class="p p-Indicator">[</span><span class="nv">65534</span><span class="p p-Indicator">]</span>
+</pre></div>
+<p>References:
+<a class="reference external" href="https://docs.openshift.org/latest/install_config/persistent_storage/persistent_storage_nfs.html#nfs-supplemental-groups">https://docs.openshift.org/latest/install_config/persistent_storage/persistent_storage_nfs.html#nfs-supplemental-groups</a></p>
+</div>
+</div>
+        </div>
+    </div>
+    <div class="span8">
+        <hr />
+    </div>
+    <div class="span8">
+        <div class="article well">
+            <article>
+                <header>
+                    <h1><a href="./lost-openstack-projet.html">The lost OpenStack project</a></h1>
+<a href="./tag/keystone.html" class="label"><i class="icon-tag"></i>&nbsp;keystone</a>
+<a href="./tag/project.html" class="label"><i class="icon-tag"></i>&nbsp;project</a>
+<a href="./tag/debug.html" class="label"><i class="icon-tag"></i>&nbsp;debug</a>
+                    <abbr class="published pull-right" title="2017-04-29T11:32:00+02:00">
+                        <i class="icon-calendar"></i>&nbsp;lör 29 april 2017
+                    </abbr>
+                </header>
+            </article>
+            <div class="summary"><p>Another fun issue with an OpenStack platform this week: a lost Keystone
+project. This is the story of how we brought this project back to life without
+loosing existing resources.</p>
+<p>We have a small OpenStack platform running in our <a class="reference external" href="https://www.objectif-libre.com">Objectif Libre</a> office in Toulouse, France. We use it
+internally to run test instances. It's running Ocata, and the Keystone setup
+uses the domains feature to separate service and temporary accounts
+(<tt class="docutils literal">default</tt> domain) from LDAP-backed accounts (<tt class="docutils literal">olcorp</tt> domain). The only
+project in the <tt class="docutils literal">olcorp</tt> domain, <tt class="docutils literal">lab</tt>, holds all our virtual resources.</p>
+<div class="section" id="luke-s-problem">
+<h2>Luke's problem</h2>
+<p>My colleague Luke (fictional name) could not login anymore at some point this
+week. He received this very explicit message: &quot;You are not authorized for any
+projects or domains.&quot;</p>
+<p>Not cool.</p>
+<p>He uses OpenStack a lot, knows what he's doing, and his account had not been
+suspended. I tried with my own account: same error. I tried again with the
+cloud-admin account this time - stored in the Keystone database, not on the
+LDAP server. Everything went fine, I could perform requests. One of those
+requests was:</p>
+<div class="highlight"><pre><span></span>openstack project list --domain olcorp
+</pre></div>
+<p>Empty answer. No project means no way to create or access resources, even if
+authentication is valid.</p>
+<p>The <tt class="docutils literal">lab</tt> project had disappeared.</p>
+</div>
+<div class="section" id="restoring-the-project">
+<h2>Restoring the project</h2>
+<p>When a project is removed from the Keystone database, the associated resources
+(instances, volumes, networks, ...) are not destroyed. This might appear as a
+maintenance problem but in our case it's been quite useful.</p>
+<p>I hoped that Keystone used soft-deletion of database resources (the data would
+still be there, but marked as deleted), but no luck there.</p>
+<p>The revival of the project required a few steps:</p>
+<ol class="arabic">
+<li><p class="first">Creation of a new <tt class="docutils literal">lab</tt> project. This is a start but is not enough: the ID
+of the new project doesn't match the ID of the removed one. All the
+OpenStack resources are associated to a project using its ID, so we needed
+the same ID. It is not possible to change/define the project ID using the
+API (AFAIK).</p>
+</li>
+<li><p class="first">Bit of MySQL tweaking. I try to avoid modifying resources on the SQL server
+as much as I can but it can be very handy:</p>
+<div class="highlight"><pre><span></span>. openrc.sh  <span class="c1"># source the OpenStack env file to get the old project ID</span>
+mysql keystonedb -e <span class="s2">&quot;update project set id=&#39;</span><span class="nv">$OS_PROJECT_ID</span><span class="s2">&#39; where name=&#39;lab&#39;&quot;</span>
+</pre></div>
+</li>
+<li><p class="first">Setup of the roles for users. We use LDAP group-based authorization, with
+only 2 roles (<tt class="docutils literal">admin</tt> and <tt class="docutils literal">_member_</tt>) so restoring the permissions has
+been easy to do. It might have been more painful with more roles, groups
+or users.</p>
+</li>
+</ol>
+<p>The process has been very easy and restoring the project took very little time.</p>
+<p>We still don't know what happened on the platform, and why the project
+disappeared, but the keystone access log is quite clear:</p>
+<div class="highlight"><pre><span></span>10.78.1.21 - - [28/Apr/2017:22:24:20 +0200] &quot;DELETE /v3/projects/68a93cc709b44de08cfd11e6bdac2b9b HTTP/1.1&quot; 204 281 &quot;-&quot; &quot;python-keystoneclient&quot;
+</pre></div>
+<p>Could be a human error or a bug (seems unlikely but eh). Will be worth a new
+blog post if we ever find out :)</p>
+</div>
+</div>
+        </div>
+    </div>
+    <div class="span8">
+        <hr />
+    </div>
+    <div class="span8">
+        <div class="article well">
+            <article>
+                <header>
+                    <h1><a href="./neutron-upgrade-rootwrap.html">OpenStack upgrade: when the L3 agent went cuckoo</a></h1>
+<a href="./tag/neutron.html" class="label"><i class="icon-tag"></i>&nbsp;neutron</a>
+<a href="./tag/rootwrap.html" class="label"><i class="icon-tag"></i>&nbsp;rootwrap</a>
+<a href="./tag/upgrade.html" class="label"><i class="icon-tag"></i>&nbsp;upgrade</a>
+                    <abbr class="published pull-right" title="2017-04-22T08:54:00+02:00">
+                        <i class="icon-calendar"></i>&nbsp;lör 22 april 2017
+                    </abbr>
+                </header>
+            </article>
+            <div class="summary"><div class="section" id="the-context">
+<h2>The context</h2>
+<p>This week we upgraded an OpenStack platform from Liberty to Mitaka for a
+customer. Small platform, no need to keep the APIs up, no big deal.</p>
+<p>The platform has 3 controller/network nodes, and 3 computes. The neutron
+configuration is quite common: Open vSwitch ML2 mechanism, self-service
+networks, virtual routers and floating IPs, L3 HA.</p>
+<p>At  <a class="reference external" href="https://www.objectif-libre.com/">Objectif Libre</a> we use a home-grown
+ansible playbook to deploy and upgrade OpenStack platforms, and everything went
+fine. Well, almost.</p>
+</div>
+<div class="section" id="the-problem">
+<h2>The problem</h2>
+<p>After the L3 agent upgrade and restart the routers were still doing their job,
+but adding new interfaces to them didn't work. We checked the logs. The agent
+was logging a <strong>lot</strong> of python traces, such as this one:</p>
+<div class="highlight"><pre><span></span>2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent [-] Failed to process compatible router &#39;8a776bc6-b2e3-4439-b122-45ce7479b0a8&#39;
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent Traceback (most recent call last):
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &quot;/usr/lib/python2.7/site-packages/neutron/agent/l3/agent.py&quot;, line 501, in _process_router_update
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     self._process_router_if_compatible(router)
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &quot;/usr/lib/python2.7/site-packages/neutron/agent/l3/agent.py&quot;, line 440, in _process_router_if_compatible
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     self._process_updated_router(router)
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &quot;/usr/lib/python2.7/site-packages/neutron/agent/l3/agent.py&quot;, line 454, in _process_updated_router
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     ri.process(self)
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &quot;/usr/lib/python2.7/site-packages/neutron/agent/l3/ha_router.py&quot;, line 389, in process
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     self.enable_keepalived()
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &quot;/usr/lib/python2.7/site-packages/neutron/agent/l3/ha_router.py&quot;, line 123, in enable_keepalived
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     self.keepalived_manager.spawn()
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &quot;/usr/lib/python2.7/site-packages/neutron/agent/linux/keepalived.py&quot;, line 401, in spawn
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     keepalived_pm.enable(reload_cfg=True)
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &quot;/usr/lib/python2.7/site-packages/neutron/agent/linux/external_process.py&quot;, line 94, in enable
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     self.reload_cfg()
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &quot;/usr/lib/python2.7/site-packages/neutron/agent/linux/external_process.py&quot;, line 97, in reload_cfg
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     self.disable(&#39;HUP&#39;)
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &quot;/usr/lib/python2.7/site-packages/neutron/agent/linux/external_process.py&quot;, line 109, in disable
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     utils.execute(cmd, run_as_root=True)
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &quot;/usr/lib/python2.7/site-packages/neutron/agent/linux/utils.py&quot;, line 116, in execute
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     execute_rootwrap_daemon(cmd, process_input, addl_env))
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &quot;/usr/lib/python2.7/site-packages/neutron/agent/linux/utils.py&quot;, line 102, in execute_rootwrap_daemon
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     return client.execute(cmd, process_input)
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &quot;/usr/lib/python2.7/site-packages/oslo_rootwrap/client.py&quot;, line 128, in execute
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     try:
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &quot;&lt;string&gt;&quot;, line 2, in run_one_command
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &quot;/usr/lib64/python2.7/multiprocessing/managers.py&quot;, line 773, in _callmethod
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     raise convert_to_error(kind, result)
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent NoFilterMatched
+</pre></div>
+<p>The trace shows that a problem occured in <tt class="docutils literal">oslo_rootwrap</tt>, leading to a
+<tt class="docutils literal">NoFilterMatched</tt> exception. <tt class="docutils literal">oslo.rootwrap</tt> is the library that allows
+unprivileged applications such as <tt class="docutils literal"><span class="pre">neutron-l3-agent</span></tt> to execute system
+commands as <tt class="docutils literal">root</tt>.  It is based on  <tt class="docutils literal">sudo</tt> and provides its own
+authorization mechanism.</p>
+<p>The <tt class="docutils literal">NoFilterMatched</tt> exception is raised by <tt class="docutils literal">oslo_rootwrap</tt> when the
+requested command doesn't match any of those defined in the configuration. This
+is great, but which command?</p>
+<p>Activating the debug in the L3 agent didn't help, the problematic command
+still didn't show in the logs.</p>
+<p>So we patched oslo to make it a bit more verbose. We modified
+<tt class="docutils literal"><span class="pre">/usr/lib/python2.7/site-packages/oslo_rootwrap/client.py</span></tt>:</p>
+<div class="highlight"><pre><span></span><span class="gd">--- client.py.orig   2017-04-22 08:19:16.463450594 +0200</span>
+<span class="gi">+++ client.py        2017-04-22 08:21:51.590386941 +0200</span>
+<span class="gu">@@ -121,6 +121,7 @@</span>
+             return self._proxy
+
+     def execute(self, cmd, stdin=None):
+<span class="gi">+        LOG.info(&#39;CMD: %s&#39; % cmd)</span>
+         self._ensure_initialized()
+         proxy = self._proxy
+         retry = False
+</pre></div>
+<p>After the L3 agent restart the logs became a bit more interesting:</p>
+<div class="highlight"><pre><span></span>2017-04-20 14:57:28.602 10262 INFO oslo_rootwrap.client [req-f6dc5751-96e3-41b8-86bc-f7f98ff26f12 - 3ce2f82bc46b429285ba0e17840e6cf7 - - -] CMD: [&#39;kill&#39;, &#39;-HUP&#39;, &#39;14410&#39;]
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent [req-f6dc5751-96e3-41b8-86bc-f7f98ff26f12 - 3ce2f82bc46b429285ba0e17840e6cf7 - - -] Failed to process compatible router &#39;eb356f30-98c9-4641-9f99-2ad91a6a7223&#39;
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent Traceback (most recent call last):
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent   File &quot;/usr/lib/python2.7/site-packages/neutron/agent/l3/agent.py&quot;, line 501, in _process_router_update
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent     self._process_router_if_compatible(router)
+[...]
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent   File &quot;/usr/lib/python2.7/site-packages/oslo_rootwrap/client.py&quot;, line 129, in execute
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent     res = proxy.run_one_command(cmd, stdin)
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent   File &quot;&lt;string&gt;&quot;, line 2, in run_one_command
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent   File &quot;/usr/lib64/python2.7/multiprocessing/managers.py&quot;, line 773, in _callmethod
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent     raise convert_to_error(kind, result)
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent NoFilterMatched
+</pre></div>
+<p>The L3 agent was trying to send a signal to a process with PID 14410. <tt class="docutils literal">ps</tt>
+told us more about it:</p>
+<div class="highlight"><pre><span></span>root     14410  0.0  0.0 111640  1324 ?        Ss   mars01   3:28 keepalived -P [...]
+</pre></div>
+<p><tt class="docutils literal">keepalived</tt> is used by the L3 agent for the router HA feature. For each
+router a VRRP/keepalived process is started to handle the failover in case a
+node goes down.</p>
+<p>So neutron was not authorized to send signals to this process.</p>
+</div>
+<div class="section" id="the-solution">
+<h2>The solution</h2>
+<p>Knowing that the problem was related to a missing authorization in the
+<tt class="docutils literal">oslo_rootwrap</tt> configuration we did a bit of digging in the configuration
+files:</p>
+<div class="highlight"><pre><span></span><span class="gp">$</span> grep keepalived /usr/share/neutron/rootwrap/*.filters
+<span class="go">/usr/share/neutron/rootwrap/l3.filters:keepalived: CommandFilter, keepalived, root</span>
+<span class="go">/usr/share/neutron/rootwrap/l3.filters:kill_keepalived: KillFilter, root, /usr/sbin/keepalived, -HUP, -15, -9</span>
+</pre></div>
+<p>The configuration allowed neutron to send signals to <tt class="docutils literal">/usr/sbin/keepalived</tt>
+processes, but our process was called <tt class="docutils literal">keepalived</tt>, without absolute path. So
+we added a new configuration do deal with the existing processes:</p>
+<div class="highlight"><pre><span></span>kill_keepalived_no_path: KillFilter, root, keepalived, -HUP, -15, -9
+</pre></div>
+<p>After a restart the L3 agent started to act as expected again.</p>
+</div>
+<div class="section" id="conclusion">
+<h2>Conclusion</h2>
+<p>Mitaka is a somewhat old realease in OpenStack terms, and we didn't face this
+problem during upgrades to more recent OpenStack versions.</p>
+<p>Knowing how to read python traces and how to dig into OpenStack code is still
+an interesting skill to possess to be able to understand situations like this
+one (google didn't help much).</p>
+<p><tt class="docutils literal">rootwrap</tt> usually does its job quite well and this problem gave us the
+opportunity to better understand how it works and how to deal with its
+configuration.</p>
+</div>
+</div>
+        </div>
+    </div>
+    <div class="span8">
+        <hr />
+    </div>
+    <div class="span8">
+        <div class="article well">
+            <article>
+                <header>
+                    <h1><a href="./ansible-vault-and-pass.html">Securing playbooks with ansible-vault</a></h1>
+<a href="./tag/ansible.html" class="label"><i class="icon-tag"></i>&nbsp;ansible</a>
+<a href="./tag/ansible-vault.html" class="label"><i class="icon-tag"></i>&nbsp;ansible-vault</a>
+<a href="./tag/pass.html" class="label"><i class="icon-tag"></i>&nbsp;pass</a>
+<a href="./tag/security.html" class="label"><i class="icon-tag"></i>&nbsp;security</a>
+                    <abbr class="published pull-right" title="2017-01-15T21:29:00+01:00">
+                        <i class="icon-calendar"></i>&nbsp;sön 15 januari 2017
+                    </abbr>
+                </header>
+            </article>
+            <div class="summary"><p>Ansible playbooks often contain sensitive information that need to be kept
+private: passwords, private keys, DNS transfer keys and so on.
+It becomes a real problem when you have to share the playbooks and their
+sensitive data with coworkers in a git repository.</p>
+<p>To solve this problem ansible provides the <tt class="docutils literal"><span class="pre">ansible-vault</span></tt> tool. It encrypts
+files using a password:</p>
+<div class="highlight"><pre><span></span><span class="gp">$</span> ansible-vault create group_vars/host
+<span class="go">New Vault password:</span>
+<span class="go">Confirm New Vault password:</span>
+<span class="go">EDIT EDIT EDIT</span>
+<span class="gp">$</span> ansible-vault edit group_vars/host
+<span class="go">Vault password:</span>
+<span class="go">UPDATE UPDATE UPDATE</span>
+</pre></div>
+<p>What you commit in your git repository is something that looks like this (only
+longer):</p>
+<div class="highlight"><pre><span></span>ANSIBLE_VAULT;1.1;AES256
+6661656265653234313962356465316166383...
+</pre></div>
+<p>You then need to use the <tt class="docutils literal"><span class="pre">--ask-vault-pass</span></tt> or <tt class="docutils literal"><span class="pre">--vault-password-file</span></tt>
+options to unlock the encrypted file when you run your playbook. Nothing
+complicated, but:</p>
+<ul class="simple">
+<li>what happens if you don't manually run ansible, but instead use an
+orchestration tool like Jenkins or Ansible Tower?</li>
+<li>how do you share and store the password with your coworkers in a secure
+manner?</li>
+</ul>
+<div class="section" id="what-to-do">
+<h2>What to do?</h2>
+<p>A solution is to use an external tool to store and retrieve the password, for
+instance <a class="reference external" href="https://www.passwordstore.org/">pass</a> or <a class="reference external" href="https://www.vaultproject.io/">HashiCorp Vault</a>.</p>
+<p>To do this you need to use a script instead a file with the
+<tt class="docutils literal"><span class="pre">--vault-password-file</span></tt> option. You also need to tell ansible to always use
+this file:</p>
+<ol class="arabic">
+<li><p class="first">Write a script in a <tt class="docutils literal">vault_pass</tt> file. This script should print the
+ansible-vault password on the standard output:</p>
+<div class="highlight"><pre><span></span><span class="ch">#!/bin/sh</span>
+
+<span class="c1"># using pass</span>
+pass pocentek.net/ansible/vault
+
+<span class="c1"># or using vault</span>
+vault <span class="nb">read</span> -field<span class="o">=</span>password secret/pocentek.net/ansible_vault
+</pre></div>
+</li>
+<li><p class="first">Make the script executable:</p>
+<div class="highlight"><pre><span></span><span class="gp">$</span> chmod +x vault_pass
+</pre></div>
+</li>
+<li><p class="first">Add the following in your <tt class="docutils literal">ansible.cfg</tt> file:</p>
+<div class="highlight"><pre><span></span><span class="k">[defaults]</span>
+<span class="na">vault_password_file</span> <span class="o">=</span> <span class="s">./vault_pass</span>
+</pre></div>
+</li>
+<li><p class="first">Run your playbook:</p>
+<div class="highlight"><pre><span></span><span class="go">ansible-playbook your-playbook.yml</span>
+</pre></div>
+</li>
+</ol>
+</div>
+<div class="section" id="pass-or-vault-as-external-tool">
+<h2>Pass or Vault as external tool?</h2>
+<p><tt class="docutils literal">pass</tt> is really easy to setup and is my tool of choice for personal
+projects. When working with several persons it becomes more complicated to use:</p>
+<ul class="simple">
+<li>every user must store the shared password at a predefined path on their local
+machine</li>
+<li>if the password must be changed every user must update it locally</li>
+</ul>
+<p><tt class="docutils literal">vault</tt> is more complex to setup but offers some nice advantages:</p>
+<ul class="simple">
+<li>no need for everyone to store the password locally</li>
+<li><tt class="docutils literal">vault</tt> supports ACLs. If a user leaves the project, her permissions are
+revoked and the password updated only once on the vault server</li>
+<li>password changes are easier to handle and can be done more often</li>
+</ul>
+</div>
+</div>
+        </div>
+    </div>
+    <div class="span8">
+        <hr />
+    </div>
+    <div class="span8">
+        <div class="article well">
+            <article>
+                <header>
+                    <h1><a href="./lxd-for-lxc-user.html">Getting started with LXD as an LXC user</a></h1>
+<a href="./tag/lxd.html" class="label"><i class="icon-tag"></i>&nbsp;lxd</a>
+<a href="./tag/lxc.html" class="label"><i class="icon-tag"></i>&nbsp;lxc</a>
+                    <abbr class="published pull-right" title="2016-11-27T13:33:00+01:00">
+                        <i class="icon-calendar"></i>&nbsp;sön 27 november 2016
+                    </abbr>
+                </header>
+            </article>
+            <div class="summary"><p>I use LXC on my ubuntu workstation quite often. LXD has been out for a while,
+and I tested it to see if I could use it as a direct replacement for LXC. And
+the answer is yes! LXD provides nice management tools that didn't exist in LXC,
+but the mechanics are the same.</p>
+<p>This blog is a recap of what I did to setup a local installation. It assumes
+you already know what is LXC and how to use it.</p>
+<div class="section" id="some-differences-with-lxc">
+<h2>Some differences with LXC</h2>
+<ul class="simple">
+<li>No more template scripts, LXD uses pre-built images. This has become quite
+common (think Docker/EC2/OpenStack Glance).</li>
+<li>LXD runs as a daemon and can be managed remotely. If run locally any user in
+the <tt class="docutils literal">lxd</tt> group can talk to the daemon. APIs are great.</li>
+<li>Network management is way simpler, and doesn't require tweaking configuration
+files.</li>
+</ul>
+</div>
+<div class="section" id="install-and-configure-lxd">
+<h2>Install and configure LXD</h2>
+<p>Ubuntu 16.04 seems to come with LXD installed, but in case it isn't there:</p>
+<div class="highlight"><pre><span></span>sudo apt install lxd
+</pre></div>
+<p>You can then use the <tt class="docutils literal">lxd init</tt> tool to setup the initial configuration:</p>
+<div class="highlight"><pre><span></span>sudo lxd init
+</pre></div>
+<p>You will have to answer questions about:</p>
+<ul class="simple">
+<li>The storage back-end, directory or zfs. The zfs back-end is nice. It uses
+clones and snapshots to optimize performance when creating containers, and
+consumes less disk space.</li>
+<li>The initial network.</li>
+<li>The LXD API access: local only or exposed on a network.</li>
+</ul>
+<p>The <tt class="docutils literal">lxd</tt> command manages the daemon, use the <tt class="docutils literal">lxc</tt> command to manage your
+containers.</p>
+</div>
+<div class="section" id="create-and-access-containers">
+<h2>Create and access containers</h2>
+<p>The containers creation is straightforward:</p>
+<div class="highlight"><pre><span></span>lxc launch ubuntu:16.04 c1
+</pre></div>
+<p><tt class="docutils literal">ubuntu:16.04</tt> is the reference to an existing container image. If LXD cannot
+find it locally, it will download it from a repository (canonical's by
+default). The image will then be stored locally.</p>
+<p>The container will be started after creation. Use the <tt class="docutils literal">list</tt> or <tt class="docutils literal">info</tt>
+subcommands to get information about the new container.</p>
+<p>You will not be able to access the container using SSH by default:</p>
+<div class="highlight"><pre><span></span><span class="gp">$</span> ssh ubuntu@10.0.4.242
+<span class="go">Permission denied (publickey).</span>
+</pre></div>
+<p>Just like for ubuntu cloud instances the default user doesn't have a password
+set, and you need to use an SSH key to authenticate. An initial setup needs to
+be done. Not handy but should only be done once.</p>
+<p>To configure your SSH key inside the container use the <tt class="docutils literal">exec</tt> subcommand:</p>
+<div class="highlight"><pre><span></span><span class="gp">$</span> lxc <span class="nb">exec</span> c1 /bin/bash
+<span class="gp">root@c1:~#</span> <span class="nb">echo</span> <span class="s2">&quot;YOU PUBLIC KEY&quot;</span> &gt; /home/ubuntu/.ssh/authorized_keys
+<span class="gp">root@c1:~#</span> <span class="nb">exit</span>
+<span class="go">exit</span>
+</pre></div>
+<p>Validate that you can access the container:</p>
+<div class="highlight"><pre><span></span><span class="gp">$</span> ssh ubuntu@10.0.4.242
+<span class="go">...</span>
+<span class="gp">ubuntu@c1:~$</span>
+</pre></div>
+<p>Congrats!</p>
+<p>Now you can build a new image that contains you SSH key:</p>
+<div class="highlight"><pre><span></span><span class="gp">$</span> lxc stop c1
+<span class="gp">$</span> lxc publish c1 --alias ubuntu-ssh
+<span class="gp">$</span> lxc image list <span class="p">|</span> grep ubuntu-ssh
+<span class="gp">$</span> lxc launch ubuntu-ssh c2
+</pre></div>
+</div>
+<div class="section" id="what-s-next">
+<h2>What's next</h2>
+<p><a class="reference external" href="https://www.stgraber.org">Stéphane Graber's blog</a> contains a lot a very
+interesting articles about LXC/LXD.</p>
+<p>You can setup DNS resolution in <a class="reference external" href="https://gauvain.pocentek.net/name-resolution-lxc-containers.html">the same way you might have done for LXC</a>.</p>
+<p>The next step for me will be testing LXD as <a class="reference external" href="https://linuxcontainers.org/lxd/getting-started-openstack/">OpenStack nova plugin</a>.</p>
+</div>
+</div>
+        </div>
+    </div>
+    <div class="span8">
+        <hr />
+    </div>
+
+<div class="span6">
+<div class="pagination">
+<ul>
+        <li class="prev disabled"><a href="#">&larr; Previous</a></li>
+        <li class="active"><a href="./index.html">1</a></li>
+        <li class=""><a href="./index2.html">2</a></li>
+        <li class=""><a href="./index3.html">3</a></li>
+        <li class="next"><a href="./index2.html">Next &rarr;</a></li>
+</ul>
+</div>
+</div>
+</div>
+        </div><!--/span-->
+        <div class="span3 well sidebar-nav" id="sidebar">
+<ul class="nav nav-list">
+<li class="nav-header"><h4><i class="icon-home icon-large"></i> social</h4></li>
+    <li><a href="https://www.linkedin.com/in/gauvainpocentek"><i class="icon-linkedin-sign icon-large"></i>linkedin</a></li>
+    <li><a href="https://github.com/gpocentek"><i class="icon-github-sign icon-large"></i>github</a></li>
+
+<li class="nav-header"><h4><i class="icon-folder-close icon-large"></i>Categories</h4></li>
+<li>
+<a href="./category/ansible.html">
+    <i class="icon-folder-open icon-large"></i>ansible
+</a>
+</li>
+<li>
+<a href="./category/containers.html">
+    <i class="icon-folder-open icon-large"></i>containers
+</a>
+</li>
+<li>
+<a href="./category/lxc.html">
+    <i class="icon-folder-open icon-large"></i>lxc
+</a>
+</li>
+<li>
+<a href="./category/lxd.html">
+    <i class="icon-folder-open icon-large"></i>lxd
+</a>
+</li>
+<li>
+<a href="./category/medibuntu.html">
+    <i class="icon-folder-open icon-large"></i>medibuntu
+</a>
+</li>
+<li>
+<a href="./category/misc.html">
+    <i class="icon-folder-open icon-large"></i>misc
+</a>
+</li>
+<li>
+<a href="./category/openstack.html">
+    <i class="icon-folder-open icon-large"></i>openstack
+</a>
+</li>
+<li>
+<a href="./category/python-gitlab.html">
+    <i class="icon-folder-open icon-large"></i>python-gitlab
+</a>
+</li>
+
+<li class="nav-header"><h4><i class="icon-th-list icon-large"></i>Archives</h4></li>
+<li><a href="./archives.html"><i class="icon-edit icon-large"></i>articles</a></li>
+
+<li class="nav-header"><h4><i class="icon-inbox icon-large"></i>Contact</h4></li>
+<li><a href="mailto:gauvainpocentek@gmail.com">
+    <i class="icon-envelope icon-large"></i>email</a></li>
+</li>
+
+
+
+<li></li>
+</ul>        </div><!--/.well -->
+
+      </div><!--/row-->
+
+      <hr>
+
+    </div><!--/.fluid-container-->
+
+<script type="text/javascript">
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-77146095-1']);
+  _gaq.push(['_trackPageview']);
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+    <!-- Le javascript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="./theme/js/jquery-1.7.2.min.js"></script>
+    <script src="./theme/js/bootstrap.min.js"></script>
+  </body>
+</html>

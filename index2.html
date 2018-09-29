@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>gpocentek's webspace</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="keywords" content="" />
+    <meta name="author" content="Gauvain Pocentek" />
+    <meta name="kittycheck_rumble" content="true" />
+    <meta name="kittycheck_position" content="top=60,right=60" />
+
+    <!-- Le styles -->
+    <link rel="stylesheet" href="./theme/css/bootstrap.min.css" type="text/css" />
+    <style type="text/css">
+      body {
+        padding-top: 60px;
+        padding-bottom: 40px;
+      }
+      .sidebar-nav {
+        padding: 9px 0;
+      }
+      .tag-1 {
+        font-size: 13pt;
+      }
+      .tag-2 {
+        font-size: 10pt;
+      }
+      .tag-2 {
+        font-size: 8pt;
+      }
+      .tag-4 {
+        font-size: 6pt;
+     }
+    </style>
+    <link href="./theme/css/bootstrap-responsive.min.css" rel="stylesheet">
+    <link href="./theme/css/font-awesome.css" rel="stylesheet">
+    <link href="./theme/css/pygments.css" rel="stylesheet">
+    <link href="./theme/css/local.css" rel="stylesheet">
+
+    <!-- Le HTML5 shim, for IE6-8 support of HTML5 elements -->
+    <!--[if lt IE 9]>
+      <script src="//html5shim.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+
+    <!-- Le fav and touch icons -->
+    <link rel="shortcut icon" href="./theme/img/favicon.ico">
+    <link rel="apple-touch-icon" href="./theme/img/apple-touch-icon.png">
+    <link rel="apple-touch-icon" sizes="72x72" href="./theme/img/apple-touch-icon-72x72.png">
+    <link rel="apple-touch-icon" sizes="114x114" href="./theme/img/apple-touch-icon-114x114.png">
+
+    <link href="./" type="application/atom+xml" rel="alternate" title="gpocentek's webspace ATOM Feed" />
+  </head>
+  <body>
+    <div class="navbar navbar-fixed-top">
+      <div class="navbar-inner">
+        <div class="container-fluid">
+          <a class="btn btn-navbar" data-toggle="collapse" data-target=".nav-collapse">
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+          </a>
+          <a class="brand" href="./index.html"><strong>gpocentek's webspace</strong> &ndash;  Random dev & ops notes</a>
+          <div class="nav-collapse">
+            <ul class="nav">
+            </ul>
+            <!--<p class="navbar-text pull-right">Logged in as <a href="#">username</a></p>-->
+          </div><!--/.nav-collapse -->
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      <div class="row">
+        <div class="span8" id="content">
+<div class="row">
+    <div class="span8">
+        <div class="article well">
+            <article>
+                <header>
+                    <h1><a href="./rgw-keystone-auth.html">Bye bye Keystone admin token</a></h1>
+<a href="./tag/keystone.html" class="label"><i class="icon-tag"></i>&nbsp;keystone</a>
+<a href="./tag/ceph.html" class="label"><i class="icon-tag"></i>&nbsp;ceph</a>
+<a href="./tag/radosgw.html" class="label"><i class="icon-tag"></i>&nbsp;radosgw</a>
+                    <abbr class="published pull-right" title="2016-10-23T11:30:00+02:00">
+                        <i class="icon-calendar"></i>&nbsp;sön 23 oktober 2016
+                    </abbr>
+                </header>
+            </article>
+            <div class="summary"><div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">This blog assumes that you have already setup a Ceph RadosGW with Keystone
+authentication.</p>
+</div>
+<p>The keystone admin token is the old, unsecure and deprecated method to
+authenticate against an OpenStack Identity server. It's been used to bootstrap
+OpenStack users and projects creation, and a good practice was to disable this
+feature completely to avoid bad security surprises.</p>
+<p>But the Ceph RadosGW documentation for the stable releases - jewel as of this
+writing - clearly states that you need to use this admin token, and that
+there's no other way to connect with Keystone:</p>
+<ul class="simple">
+<li><a class="reference external" href="http://docs.ceph.com/docs/jewel/radosgw/keystone/">http://docs.ceph.com/docs/jewel/radosgw/keystone/</a></li>
+<li><a class="reference external" href="http://docs.ceph.com/docs/jewel/radosgw/config-ref/#keystone-settings">http://docs.ceph.com/docs/jewel/radosgw/config-ref/#keystone-settings</a></li>
+</ul>
+<p>Well that's not true.</p>
+<p>Support for authentication using a service account has been supported in quite
+a while, but never documented. Keystone v3 is also supported since the jewel
+release. The master docs have nice updates:</p>
+<ul class="simple">
+<li><a class="reference external" href="http://docs.ceph.com/docs/master/radosgw/keystone/">http://docs.ceph.com/docs/master/radosgw/keystone/</a></li>
+<li><a class="reference external" href="http://docs.ceph.com/docs/master/radosgw/config-ref/#keystone-settings">http://docs.ceph.com/docs/master/radosgw/config-ref/#keystone-settings</a></li>
+</ul>
+<p>For keystone v3 you can use something like this in your <tt class="docutils literal">ceph.conf</tt>:</p>
+<div class="highlight"><pre><span></span><span class="k">[client.rgw.HOSTNAME]</span>
+<span class="na">rgw keystone url</span> <span class="o">=</span> <span class="s">http://keystone.host:35357</span>
+<span class="na">rgw keystone admin user</span> <span class="o">=</span> <span class="s">ceph</span>
+<span class="na">rgw keystone admin password</span> <span class="o">=</span> <span class="s">S3Cr3t</span>
+<span class="na">rgw keystone admin project</span> <span class="o">=</span> <span class="s">admin</span>
+<span class="na">rgw keystone admin domain</span> <span class="o">=</span> <span class="s">default</span>
+<span class="na">rgw keystone api version</span> <span class="o">=</span> <span class="s">3</span>
+<span class="na">...</span>
+</pre></div>
+<p>You need to create a <tt class="docutils literal">ceph</tt> service account and give it the <tt class="docutils literal">admin</tt> role:</p>
+<div class="highlight"><pre><span></span><span class="gp">$</span> openstack user create ceph --password-prompt
+<span class="gp">$</span> openstack role add --user ceph --project admin admin
+</pre></div>
+<p>Don't forget to disable the <tt class="docutils literal">admin_token_auth</tt> filter from your paste-deploy
+pipeline in <tt class="docutils literal"><span class="pre">/etc/keystone/keystone-paste.ini</span></tt>.</p>
+</div>
+        </div>
+    </div>
+    <div class="span8">
+        <hr />
+    </div>
+    <div class="span8">
+        <div class="article well">
+            <article>
+                <header>
+                    <h1><a href="./ansible-to-deploy-lxc-containers.html">Creating and using LXC containers with Ansible in-memory inventory</a></h1>
+<a href="./tag/ansible.html" class="label"><i class="icon-tag"></i>&nbsp;ansible</a>
+<a href="./tag/lxc.html" class="label"><i class="icon-tag"></i>&nbsp;lxc</a>
+                    <abbr class="published pull-right" title="2016-10-10T07:22:00+02:00">
+                        <i class="icon-calendar"></i>&nbsp;mån 10 oktober 2016
+                    </abbr>
+                </header>
+            </article>
+            <div class="summary"><div class="section" id="what-we-want-to-do">
+<h2>What we want to do</h2>
+<p>Ansible provides an <a class="reference external" href="http://docs.ansible.com/ansible/lxc_container_module.html">lxc_container</a> module to manage LXC containers on a remote
+host. It is very handy but once you've deployed a container you need to manage
+applications deployed inside this container. Also with Ansible obviously!</p>
+<p>A simple approach could be to write a playbook to deploy the LXC containers,
+then generate a static inventory, and finally use this inventory with another
+playbook to deploy your final application.</p>
+<p>An other approach is to have a single playbook. The first play will deploy the
+LXC containers and generate an in-memory inventory using the <a class="reference external" href="http://docs.ansible.com/ansible/add_host_module.html">add_host</a> module
+for each container. The <tt class="docutils literal">lxc_container</tt> module returns the IP addresses for
+the container (once it's started).</p>
+<p>If your containers are connected to an internal bridge on the remote host, you
+also need to configure your SSH client to help ansible access them.</p>
+</div>
+<div class="section" id="an-example-of-how-it-can-be-done">
+<h2>An example of how it can be done</h2>
+<p>The example uses the following setup:</p>
+<ul>
+<li><p class="first">the LXC hosts are listed in the <tt class="docutils literal">[lxc_hosts]</tt> group in the inventory</p>
+</li>
+<li><p class="first">for each host a list of containers to manage is defined in the <tt class="docutils literal">containers</tt>
+variable in a <tt class="docutils literal"><span class="pre">host_vars/{{inventory_hostname}}</span></tt> file, with content similar
+to this:</p>
+<div class="highlight"><pre><span></span><span class="l l-Scalar l-Scalar-Plain">containers</span><span class="p p-Indicator">:</span>
+  <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">name</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">memcached-1</span>
+    <span class="l l-Scalar l-Scalar-Plain">service</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">memcache</span>
+  <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">name</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">mysql-1</span>
+    <span class="l l-Scalar l-Scalar-Plain">service</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">mysql</span>
+</pre></div>
+</li>
+<li><p class="first">containers are connected to an <tt class="docutils literal">lxcbr0</tt> bridge, on a 10.0.100.0/24 network</p>
+</li>
+<li><p class="first">containers are deployed using a custom <tt class="docutils literal"><span class="pre">ubuntu-ansible</span></tt> template, based on
+the original <tt class="docutils literal">ubuntu</tt> template. The template provides some extra
+configuration steps to ease ansible integration:</p>
+<ul class="simple">
+<li>installation of python2.7</li>
+<li>passwordless sudo configuration</li>
+<li>injection of an SSH public key</li>
+</ul>
+<p>You can use the <tt class="docutils literal">container_command</tt> argument of the <tt class="docutils literal">lxc_container</tt>
+module instead if using a custom template.</p>
+</li>
+</ul>
+<div class="section" id="sample-playbook">
+<h3>Sample playbook</h3>
+<p>The first play creates the containers (if needed), and retrieves the dynamically
+assigned IP addresses of all managed containers:</p>
+<div class="highlight"><pre><span></span><span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">hosts</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">lxc_hosts</span>
+  <span class="l l-Scalar l-Scalar-Plain">become</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">true</span>
+  <span class="l l-Scalar l-Scalar-Plain">tasks</span><span class="p p-Indicator">:</span>
+  <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">name</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">Create the containers</span>
+    <span class="l l-Scalar l-Scalar-Plain">lxc_container</span><span class="p p-Indicator">:</span>
+      <span class="l l-Scalar l-Scalar-Plain">template</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">ubuntu-ansible</span>
+      <span class="l l-Scalar l-Scalar-Plain">name</span><span class="p p-Indicator">:</span> <span class="s">&quot;{{</span><span class="nv"> </span><span class="s">item.name</span><span class="nv"> </span><span class="s">}}&quot;</span>
+      <span class="l l-Scalar l-Scalar-Plain">state</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">started</span>
+    <span class="l l-Scalar l-Scalar-Plain">with_items</span><span class="p p-Indicator">:</span> <span class="s">&quot;{{</span><span class="nv"> </span><span class="s">containers</span><span class="nv"> </span><span class="s">}}&quot;</span>
+    <span class="l l-Scalar l-Scalar-Plain">register</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">containers_info</span>
+
+  <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">name</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">Wait for the network to be setup in the containers</span>
+    <span class="l l-Scalar l-Scalar-Plain">when</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">containers_info|changed</span>
+    <span class="l l-Scalar l-Scalar-Plain">pause</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">seconds=10</span>
+
+  <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">name</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">Get containers info now that IPs are available</span>
+    <span class="l l-Scalar l-Scalar-Plain">lxc_container</span><span class="p p-Indicator">:</span>
+      <span class="l l-Scalar l-Scalar-Plain">name</span><span class="p p-Indicator">:</span> <span class="s">&quot;{{</span><span class="nv"> </span><span class="s">item.name</span><span class="nv"> </span><span class="s">}}&quot;</span>
+    <span class="l l-Scalar l-Scalar-Plain">with_items</span><span class="p p-Indicator">:</span> <span class="s">&quot;{{</span><span class="nv"> </span><span class="s">containers</span><span class="nv"> </span><span class="s">}}&quot;</span>
+    <span class="l l-Scalar l-Scalar-Plain">register</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">containers_info</span>
+
+  <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">name</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">Register the hosts in the inventory</span>
+    <span class="l l-Scalar l-Scalar-Plain">add_host</span><span class="p p-Indicator">:</span>
+      <span class="l l-Scalar l-Scalar-Plain">name</span><span class="p p-Indicator">:</span> <span class="s">&quot;{{</span><span class="nv"> </span><span class="s">item.lxc_container.ips.0</span><span class="nv"> </span><span class="s">}}&quot;</span>
+      <span class="l l-Scalar l-Scalar-Plain">group</span><span class="p p-Indicator">:</span> <span class="s">&quot;{{</span><span class="nv"> </span><span class="s">item.item.service</span><span class="nv"> </span><span class="s">}}&quot;</span>
+    <span class="l l-Scalar l-Scalar-Plain">with_items</span><span class="p p-Indicator">:</span> <span class="s">&quot;{{</span><span class="nv"> </span><span class="s">containers_info.results</span><span class="nv"> </span><span class="s">}}&quot;</span>
+</pre></div>
+<p>The following plays use the newly added groups and hosts:</p>
+<div class="highlight"><pre><span></span><span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">hosts</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">memcache</span>
+  <span class="l l-Scalar l-Scalar-Plain">become</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">true</span>
+  <span class="l l-Scalar l-Scalar-Plain">tasks</span><span class="p p-Indicator">:</span>
+  <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">debug</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">msg=&quot;memcached deployment&quot;</span>
+
+<span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">hosts</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">mysql</span>
+  <span class="l l-Scalar l-Scalar-Plain">become</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">true</span>
+  <span class="l l-Scalar l-Scalar-Plain">tasks</span><span class="p p-Indicator">:</span>
+  <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">debug</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">msg=&quot;mysql deployment&quot;</span>
+</pre></div>
+</div>
+<div class="section" id="ssh-client-configuration">
+<h3>SSH client configuration</h3>
+<p>In the example setup Ansible can't reach the created containers because they
+are connected on an isolated network. This can be dealt with an ssh
+configuration in <tt class="docutils literal"><span class="pre">~/.ssh/config</span></tt>:</p>
+<div class="highlight"><pre><span></span>Host lxc1
+    Hostname lxc1.domain.com
+    User localadmin
+
+Host 10.0.100.*
+    User ubuntu
+    ForwardAgent yes
+    ProxyCommand ssh -q lxc1 nc %h %p
+    StrictHostKeyChecking no
+    UserKnownHostsFile=/dev/null
+</pre></div>
+</div>
+</div>
+<div class="section" id="final-word">
+<h2>Final word</h2>
+<p>Although this example deploys LXC containers, the same process can be used for
+any type of VM/container deployment: EC2, OpenStack, GCE, Azure or any other
+platform.</p>
+</div>
+</div>
+        </div>
+    </div>
+    <div class="span8">
+        <hr />
+    </div>
+    <div class="span8">
+        <div class="article well">
+            <article>
+                <header>
+                    <h1><a href="./name-resolution-lxc-containers.html">Name resolution for LXC containers</a></h1>
+<a href="./tag/lxc.html" class="label"><i class="icon-tag"></i>&nbsp;lxc</a>
+<a href="./tag/dns.html" class="label"><i class="icon-tag"></i>&nbsp;dns</a>
+                    <abbr class="published pull-right" title="2016-09-18T13:02:00+02:00">
+                        <i class="icon-calendar"></i>&nbsp;sön 18 september 2016
+                    </abbr>
+                </header>
+            </article>
+            <div class="summary"><p>I use LXC containers on my laptop for testing purpose quite a lot. I create, I
+destroy, I recreate. LXC is easy to use for this purpose, but one thing was
+missing on my setup: the automatic creation of a DNS record.</p>
+<p>The <tt class="docutils literal"><span class="pre">lxc-net</span></tt> script used on Ubuntu to create the default <tt class="docutils literal">lxcbr0</tt> bridge
+provides almost everything to make this possible without too much effort.</p>
+<p>The steps to set this up are:</p>
+<ol class="arabic">
+<li><p class="first">Update <tt class="docutils literal"><span class="pre">/etc/default/lxc-net</span></tt> to define a domain. This domain will be
+managed by the same <tt class="docutils literal">dnsmasq</tt> process that already serves as DHCP server
+for the LXC containers.</p>
+<p>Sample configuration:</p>
+<div class="highlight"><pre><span></span>USE_LXC_BRIDGE=&quot;true&quot;
+LXC_BRIDGE=&quot;lxcbr0&quot;
+LXC_ADDR=&quot;10.0.3.1&quot;
+LXC_NETMASK=&quot;255.255.255.0&quot;
+LXC_NETWORK=&quot;10.0.3.0/24&quot;
+LXC_DHCP_RANGE=&quot;10.0.3.2,10.0.3.254&quot;
+LXC_DHCP_MAX=&quot;253&quot;
+# This is the domain name definition
+LXC_DOMAIN=&quot;lxc&quot;
+</pre></div>
+</li>
+<li><p class="first">Restart the service:</p>
+<div class="highlight"><pre><span></span><span class="gp">$</span> sudo service lxc-net restart
+</pre></div>
+</li>
+<li><p class="first">Validate that the dnsmasq process can resolve a running container IP:</p>
+<div class="highlight"><pre><span></span><span class="gp">$</span> dig @10.0.3.1 container_name.lxc
+<span class="go">...</span>
+<span class="go">;; ANSWER SECTION:</span>
+<span class="go">container_name.lxc.       0       IN      A       10.0.3.156</span>
+<span class="go">...</span>
+</pre></div>
+</li>
+</ol>
+<p>A nice bonus is that the dns configuration inside a newly started container
+allows short name resolution:</p>
+<div class="highlight"><pre><span></span><span class="gp">$</span> sudo lxc-start -n other_container
+<span class="gp">$</span> sleep <span class="m">10</span>
+<span class="gp">$</span> sudo lxc-attach -n other_container -- ping -c <span class="m">2</span> container_name
+<span class="go">PING container_name (10.0.3.220) 56(84) bytes of data.</span>
+<span class="go">64 bytes from container_name.lxc (10.0.3.220): icmp_seq=1 ttl=64 time=0.039 ms</span>
+<span class="go">64 bytes from container_name.lxc (10.0.3.220): icmp_seq=2 ttl=64 time=0.046 ms</span>
+</pre></div>
+<p>To make this setup really usable the host must be configured to redirect DNS
+queries to the LXC-related dnsmasq process. By default Ubuntu configures
+<tt class="docutils literal">/etc/resolv.conf</tt> to use <tt class="docutils literal">127.0.1.1</tt> as DNS resolver. A <tt class="docutils literal">dnsmasq</tt>
+process takes care of forwarding the requests to the proper authoritative DNS.</p>
+<p>To setup the forwarding, add the following line to <tt class="docutils literal">/etc/dnsmasq.d/lxc</tt>:</p>
+<div class="highlight"><pre><span></span>server=/lxc/10.0.3.1
+</pre></div>
+<p>If you're running a desktop version of Ubuntu, you probably use Network
+Manager. Symlink this configuration file to
+<tt class="docutils literal">/etc/NetworkManager/dnsmasq.d/lxc</tt> and restart Network Manager:</p>
+<div class="highlight"><pre><span></span><span class="gp">$</span> sudo ln -s /etc/dnsmasq.d/lxc /etc/NetworkManager/dnsmasq.d/
+<span class="gp">$</span> sudo service network-manager restart
+</pre></div>
+<p>DNS resolution should now work on your host:</p>
+<div class="highlight"><pre><span></span><span class="gp">$</span> dig container_name.lxc
+<span class="go">...</span>
+<span class="go">;; ANSWER SECTION:</span>
+<span class="go">container_name.lxc.   0   IN  A   10.0.3.156</span>
+<span class="go">...</span>
+</pre></div>
+</div>
+        </div>
+    </div>
+    <div class="span8">
+        <hr />
+    </div>
+    <div class="span8">
+        <div class="article well">
+            <article>
+                <header>
+                    <h1><a href="./python-gitlab-014.html">python-gitlab 0.14</a></h1>
+<a href="./tag/python.html" class="label"><i class="icon-tag"></i>&nbsp;python</a>
+<a href="./tag/gitlab.html" class="label"><i class="icon-tag"></i>&nbsp;gitlab</a>
+<a href="./tag/python-gitlab.html" class="label"><i class="icon-tag"></i>&nbsp;python-gitlab</a>
+                    <abbr class="published pull-right" title="2016-08-07T22:52:00+02:00">
+                        <i class="icon-calendar"></i>&nbsp;sön 07 augusti 2016
+                    </abbr>
+                </header>
+            </article>
+            <div class="summary"><p>It's been a while since the 0.13 release of <a class="reference external" href="`python-gitlabhttp://github.com/gpocentek/python-gitlab`">python-gitlab</a>. For the 0.14
+release I spent some time writing code examples to make the first steps of
+using the API easier. All the objects are not yet documented, but since there's
+been a lot of new features and some bug fixes I wanted to get things out there.</p>
+<p>python-gitlab is a python package and a <tt class="docutils literal">gitlab</tt> CLI to interact with the
+<a class="reference external" href="https://gitlab.com">Gitlab</a> API.</p>
+<p>To install the 0.14 version using pip:</p>
+<div class="highlight"><pre><span></span>pip install --upgrade python-gitlab
+</pre></div>
+<p>Download the tarballs on pypi:
+<a class="reference external" href="https://pypi.python.org/pypi/python-gitlab">https://pypi.python.org/pypi/python-gitlab</a></p>
+<p>Documentation is available on read the docs:
+<a class="reference external" href="http://python-gitlab.readthedocs.io/en/stable/">http://python-gitlab.readthedocs.io/en/stable/</a></p>
+<p>Report bugs and send pull request on github, contributions are very welcome:
+<a class="reference external" href="http://github.com/gpocentek/python-gitlab">http://github.com/gpocentek/python-gitlab</a></p>
+</div>
+        </div>
+    </div>
+    <div class="span8">
+        <hr />
+    </div>
+    <div class="span8">
+        <div class="article well">
+            <article>
+                <header>
+                    <h1><a href="./ansible-module-for-variables.html">Ansible: writing a module to deal with complex variables setup</a></h1>
+<a href="./tag/ansible.html" class="label"><i class="icon-tag"></i>&nbsp;ansible</a>
+<a href="./tag/python.html" class="label"><i class="icon-tag"></i>&nbsp;python</a>
+                    <abbr class="published pull-right" title="2016-03-16T12:38:00+01:00">
+                        <i class="icon-calendar"></i>&nbsp;ons 16 mars 2016
+                    </abbr>
+                </header>
+            </article>
+            <div class="summary"><div class="section" id="the-problem">
+<h2>The problem</h2>
+<p>Ansible playbooks that can deploy applications in multiple contexts (for
+example a 1-node setup for tests, and multi-node setup with HA for production)
+might have to deal with rather complex variable definitions. The templating
+system provided by Ansible is a great help, but it can be difficult and very
+verbose to use it sometimes.</p>
+<p>I recently had to solve a simple problem. Depending on the installation node of
+the HAProxy load balancer, the 15 balanced services had to listen on different
+ports to avoid conflicts.</p>
+</div>
+<div class="section" id="one-solution">
+<h2>One solution</h2>
+<p>Instead of computing the selected port using the template system, I chose to
+develop a module that would set the chosen ports as a fact on every target. The
+module is called once at the beginning of the playbook, and the ports are
+available as a variable in all the tasks.</p>
+<div class="section" id="the-module">
+<h3>The module</h3>
+<p>The module takes one mandatory boolean argument, <tt class="docutils literal">with_haproxy</tt>.</p>
+<p>The implementation looks like this (<tt class="docutils literal">library/get_ports.py</tt>):</p>
+<div class="highlight"><pre><span></span><span class="n">INTERNAL</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;service1&#39;</span><span class="p">:</span> <span class="mi">11001</span><span class="p">,</span>
+    <span class="s1">&#39;service2&#39;</span><span class="p">:</span> <span class="mi">11002</span>
+<span class="p">}</span>
+<span class="n">PUBLIC</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;service1&#39;</span><span class="p">:</span> <span class="mi">1001</span><span class="p">,</span>
+    <span class="s1">&#39;service2&#39;</span><span class="p">:</span> <span class="mi">1002</span>
+<span class="p">}</span>
+
+<span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+    <span class="n">module</span> <span class="o">=</span> <span class="n">AnsibleModule</span><span class="p">(</span>
+        <span class="n">argument_spec</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+            <span class="n">with_haproxy</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">type</span><span class="o">=</span><span class="s1">&#39;bool&#39;</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
+
+    <span class="n">with_haproxy</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="s1">&#39;with_haproxy&#39;</span><span class="p">]</span>
+    <span class="n">ports</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;public&#39;</span><span class="p">:</span> <span class="n">PUBLIC</span><span class="p">}</span>
+    <span class="n">ports</span><span class="p">[</span><span class="s1">&#39;internal&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">INTERNAL</span> <span class="k">if</span> <span class="n">with_haproxy</span> <span class="k">else</span> <span class="n">PUBLIC</span>
+
+    <span class="n">module</span><span class="o">.</span><span class="n">exit_json</span><span class="p">(</span><span class="n">changed</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span> <span class="n">result</span><span class="o">=</span><span class="s2">&quot;success&quot;</span><span class="p">,</span>
+                     <span class="n">ansible_facts</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;ports&#39;</span><span class="p">:</span> <span class="n">ports</span><span class="p">})</span>
+
+    <span class="kn">from</span> <span class="nn">ansible.module_utils.basic</span> <span class="kn">import</span> <span class="o">*</span>
+    <span class="n">main</span><span class="p">()</span>
+</pre></div>
+<p>The <tt class="docutils literal">ansible_facts</tt> argument name is important, it will tell ansible to
+register this variable as a fact, so you don't need to use the <tt class="docutils literal">register</tt>
+attribute in your task.</p>
+<p>The <tt class="docutils literal">ports</tt> dict holds the ports information for public and internal access.
+The <tt class="docutils literal">ports.internal</tt> dict is used to configure the services ports. If HAProxy
+is used, they have custom (<tt class="docutils literal">INTERNAL</tt>) ports to avoid conflicting with
+HAProxy. Otherwise they use the official (<tt class="docutils literal">PUBLIC</tt>) port.</p>
+</div>
+<div class="section" id="the-playbook">
+<h3>The playbook</h3>
+<p>To register the facts, the first task of the playbook looks like this:</p>
+<div class="highlight"><pre><span></span><span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">name</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">Register ports</span>
+  <span class="l l-Scalar l-Scalar-Plain">local_action</span><span class="p p-Indicator">:</span>
+    <span class="l l-Scalar l-Scalar-Plain">module</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">get_ports</span>
+    <span class="l l-Scalar l-Scalar-Plain">with_haproxy</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">true|false</span>
+
+<span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">debug</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">var=ports.internal.service1</span>
+<span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">debug</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">var=ports.internal.service2</span>
+</pre></div>
+<p>The <tt class="docutils literal">local_action</tt> module avoids a useless connection to the targets.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">If you have not written modules for Ansible yet, have a look at <a class="reference external" href="http://docs.ansible.com/ansible/developing_modules.html">the
+tutorial</a>. They
+can be written in any language, although using Python makes things a lot
+easier.</p>
+</div>
+</div>
+</div>
+</div>
+        </div>
+    </div>
+    <div class="span8">
+        <hr />
+    </div>
+
+<div class="span6">
+<div class="pagination">
+<ul>
+        <li class="prev"><a href="./index.html">&larr; Previous</a></li>
+        <li class=""><a href="./index.html">1</a></li>
+        <li class="active"><a href="./index2.html">2</a></li>
+        <li class=""><a href="./index3.html">3</a></li>
+        <li class="next"><a href="./index3.html">Next &rarr;</a></li>
+</ul>
+</div>
+</div>
+</div>
+        </div><!--/span-->
+        <div class="span3 well sidebar-nav" id="sidebar">
+<ul class="nav nav-list">
+<li class="nav-header"><h4><i class="icon-home icon-large"></i> social</h4></li>
+    <li><a href="https://www.linkedin.com/in/gauvainpocentek"><i class="icon-linkedin-sign icon-large"></i>linkedin</a></li>
+    <li><a href="https://github.com/gpocentek"><i class="icon-github-sign icon-large"></i>github</a></li>
+
+<li class="nav-header"><h4><i class="icon-folder-close icon-large"></i>Categories</h4></li>
+<li>
+<a href="./category/ansible.html">
+    <i class="icon-folder-open icon-large"></i>ansible
+</a>
+</li>
+<li>
+<a href="./category/containers.html">
+    <i class="icon-folder-open icon-large"></i>containers
+</a>
+</li>
+<li>
+<a href="./category/lxc.html">
+    <i class="icon-folder-open icon-large"></i>lxc
+</a>
+</li>
+<li>
+<a href="./category/lxd.html">
+    <i class="icon-folder-open icon-large"></i>lxd
+</a>
+</li>
+<li>
+<a href="./category/medibuntu.html">
+    <i class="icon-folder-open icon-large"></i>medibuntu
+</a>
+</li>
+<li>
+<a href="./category/misc.html">
+    <i class="icon-folder-open icon-large"></i>misc
+</a>
+</li>
+<li>
+<a href="./category/openstack.html">
+    <i class="icon-folder-open icon-large"></i>openstack
+</a>
+</li>
+<li>
+<a href="./category/python-gitlab.html">
+    <i class="icon-folder-open icon-large"></i>python-gitlab
+</a>
+</li>
+
+<li class="nav-header"><h4><i class="icon-th-list icon-large"></i>Archives</h4></li>
+<li><a href="./archives.html"><i class="icon-edit icon-large"></i>articles</a></li>
+
+<li class="nav-header"><h4><i class="icon-inbox icon-large"></i>Contact</h4></li>
+<li><a href="mailto:gauvainpocentek@gmail.com">
+    <i class="icon-envelope icon-large"></i>email</a></li>
+</li>
+
+
+
+<li></li>
+</ul>        </div><!--/.well -->
+
+      </div><!--/row-->
+
+      <hr>
+
+    </div><!--/.fluid-container-->
+
+<script type="text/javascript">
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-77146095-1']);
+  _gaq.push(['_trackPageview']);
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+    <!-- Le javascript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="./theme/js/jquery-1.7.2.min.js"></script>
+    <script src="./theme/js/bootstrap.min.js"></script>
+  </body>
+</html>

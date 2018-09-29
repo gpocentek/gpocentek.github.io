@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>gpocentek's webspace - openshift | gpocentek's webspace</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="keywords" content="" />
+    <meta name="author" content="Gauvain Pocentek" />
+    <meta name="kittycheck_rumble" content="true" />
+    <meta name="kittycheck_position" content="top=60,right=60" />
+
+    <!-- Le styles -->
+    <link rel="stylesheet" href="../theme/css/bootstrap.min.css" type="text/css" />
+    <style type="text/css">
+      body {
+        padding-top: 60px;
+        padding-bottom: 40px;
+      }
+      .sidebar-nav {
+        padding: 9px 0;
+      }
+      .tag-1 {
+        font-size: 13pt;
+      }
+      .tag-2 {
+        font-size: 10pt;
+      }
+      .tag-2 {
+        font-size: 8pt;
+      }
+      .tag-4 {
+        font-size: 6pt;
+     }
+    </style>
+    <link href="../theme/css/bootstrap-responsive.min.css" rel="stylesheet">
+    <link href="../theme/css/font-awesome.css" rel="stylesheet">
+    <link href="../theme/css/pygments.css" rel="stylesheet">
+    <link href="../theme/css/local.css" rel="stylesheet">
+
+    <!-- Le HTML5 shim, for IE6-8 support of HTML5 elements -->
+    <!--[if lt IE 9]>
+      <script src="//html5shim.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+
+    <!-- Le fav and touch icons -->
+    <link rel="shortcut icon" href="../theme/img/favicon.ico">
+    <link rel="apple-touch-icon" href="../theme/img/apple-touch-icon.png">
+    <link rel="apple-touch-icon" sizes="72x72" href="../theme/img/apple-touch-icon-72x72.png">
+    <link rel="apple-touch-icon" sizes="114x114" href="../theme/img/apple-touch-icon-114x114.png">
+
+    <link href="../" type="application/atom+xml" rel="alternate" title="gpocentek's webspace ATOM Feed" />
+  </head>
+  <body>
+    <div class="navbar navbar-fixed-top">
+      <div class="navbar-inner">
+        <div class="container-fluid">
+          <a class="btn btn-navbar" data-toggle="collapse" data-target=".nav-collapse">
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+          </a>
+          <a class="brand" href="../index.html"><strong>gpocentek's webspace</strong> &ndash;  Random dev & ops notes</a>
+          <div class="nav-collapse">
+            <ul class="nav">
+            </ul>
+            <!--<p class="navbar-text pull-right">Logged in as <a href="#">username</a></p>-->
+          </div><!--/.nav-collapse -->
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      <div class="row">
+        <div class="span8" id="content">
+<div class="row">
+    <div class="span8">
+        <div class="article well">
+            <article>
+                <header>
+                    <h1><a href="../openshift-single-node.html">OpenShift Origin on a single node</a></h1>
+<a href="../tag/openshift.html" class="label"><i class="icon-tag"></i>&nbsp;openshift</a>
+<a href="../tag/ansible.html" class="label"><i class="icon-tag"></i>&nbsp;ansible</a>
+                    <abbr class="published pull-right" title="2017-12-09T18:00:00+01:00">
+                        <i class="icon-calendar"></i>&nbsp;lör 09 december 2017
+                    </abbr>
+                </header>
+            </article>
+            <div class="summary"><p>I needed to deploy an OpenShift Origin instance for testing purposes. This
+article describes how I used <cite>openshift-ansible</cite> to deploy the software.</p>
+<div class="section" id="existing-tools">
+<h2>Existing tools</h2>
+<p>There are several solutions to do this:</p>
+<ul class="simple">
+<li>you can use <a class="reference external" href="https://docs.openshift.org/latest/minishift/index.html">minishift</a></li>
+<li>or you can deploy an all-in-one server using <a class="reference external" href="https://docs.openshift.org/latest/getting_started/administrators.html#running-in-a-docker-container">a container</a>
+or <a class="reference external" href="https://docs.openshift.org/latest/getting_started/administrators.html#downloading-the-binary">a single binary</a></li>
+</ul>
+<p>These solutions work fine but provide a limited set of features by default.</p>
+</div>
+<div class="section" id="environment">
+<h2>Environment</h2>
+<p>I used a x86 physical server for the deployment:</p>
+<ul class="simple">
+<li>8 cores</li>
+<li>32G RAM</li>
+<li>2 x 1T disks</li>
+</ul>
+<p>OpenShift and the ansible playbook only support RedHat-like distributions. I
+used a minimal CentOS 7.4 installation without SELinux, and without firewalld.</p>
+<p>The machine DNS name is <tt class="docutils literal">op1.pocentek.net</tt>.</p>
+<div class="section" id="docker-setup">
+<h3>Docker setup</h3>
+<p>The OpenShift playbook requires a working docker-engine installation on the
+target host. For better performance OpenShift recommends to use the <cite>overlay2</cite>
+storage driver. This driver requires an XFS filesystem.</p>
+<p>Docker installation steps:</p>
+<div class="highlight"><pre><span></span><span class="gp">#</span> mkfs.xfs /dev/sdb1  <span class="c1"># dedicated disk for docker in this setup</span>
+<span class="gp">#</span> mkdir /var/lib/docker
+<span class="gp">#</span> <span class="nb">echo</span> <span class="s1">&#39;/dev/sdb1 /var/lib/docker xfs defaults 0 0&#39;</span> &gt;&gt; /etc/fstab
+<span class="gp">#</span> mount -a
+<span class="gp">#</span> yum install -y docker
+<span class="gp">#</span> <span class="nb">echo</span> <span class="s1">&#39;{&quot;storage-driver&quot;: &quot;overlay2&quot;}&#39;</span> &gt; /etc/docker/daemon.json
+<span class="gp">#</span> systemctl <span class="nb">enable</span> docker.service
+<span class="gp">#</span> systemctl start docker.service
+<span class="gp">#</span> docker ps  <span class="c1"># make sure you can talk to the docker daemon</span>
+</pre></div>
+</div>
+<div class="section" id="dns-setup">
+<h3>DNS setup</h3>
+<p>To benefit from OpenShift routing feature I defined a wildcard A entry in the
+<tt class="docutils literal">pocentek.net</tt> DNS zone:</p>
+<div class="highlight"><pre><span></span>*.oc.pocentek.net. IN A 12.34.56.78
+</pre></div>
+<p>This allows dynamic resolution for all the application deployed on OpenShift,
+as long as they are routed using a matching domain name.</p>
+</div>
+</div>
+<div class="section" id="playbook-configuration">
+<h2>Playbook configuration</h2>
+<p>The OpenShift playbook requires only a few variables to be set to perform the
+installation. But a single node setup requires a few tweaks.</p>
+<p>You first need to retrieve the code. I used the 3.6 version of OpenShift if
+this example:</p>
+<div class="highlight"><pre><span></span><span class="gp">$</span> git clone https://github.com/openshift/openshift-ansible.git
+<span class="gp">$</span> <span class="nb">cd</span> openshift-ansible
+<span class="gp">$</span> git checkout --track origin/release-3.6
+</pre></div>
+<p>All the settings are defined in an inventory file. I used the following
+<tt class="docutils literal">inventory/hosts</tt> file:</p>
+<div class="highlight"><pre><span></span><span class="k">[OSEv3:children]</span>
+<span class="na">masters</span>
+<span class="na">nodes</span>
+<span class="na">etcd</span>
+
+<span class="k">[masters]</span>
+<span class="na">op1.pocentek.net openshift_public_hostname</span><span class="o">=</span><span class="s">&quot;{{ inventory_hostname }}&quot; openshift_hostname=&quot;{{ ansible_default_ipv4.address }}&quot;</span>
+
+<span class="k">[etcd]</span>
+<span class="na">op1.pocentek.net</span>
+
+<span class="k">[nodes]</span>
+<span class="na">op1.pocentek.net openshift_node_labels</span><span class="o">=</span><span class="s">&quot;{&#39;region&#39;: &#39;primary&#39;, &#39;zone&#39;: &#39;default&#39;}&quot; openshift_schedulable=true</span>
+
+<span class="k">[OSEv3:vars]</span>
+<span class="na">ansible_ssh_user</span><span class="o">=</span><span class="s">root</span>
+<span class="na">ansible_become</span><span class="o">=</span><span class="s">no</span>
+
+<span class="na">openshift_deployment_type</span><span class="o">=</span><span class="s">origin</span>
+<span class="na">openshift_release</span><span class="o">=</span><span class="s">v3.6</span>
+
+<span class="na">openshift_master_default_subdomain</span><span class="o">=</span><span class="s">oc.pocentek.net</span>
+
+<span class="na">openshift_master_identity_providers</span><span class="o">=</span><span class="s">[{&#39;name&#39;: &#39;htpasswd_auth&#39;, &#39;login&#39;: &#39;true&#39;, &#39;challenge&#39;: &#39;true&#39;, &#39;kind&#39;: &#39;HTPasswdPasswordIdentityProvider&#39;, &#39;filename&#39;: &#39;/etc/origin/master/htpasswd&#39;}]</span>
+<span class="na">openshift_master_htpasswd_users</span><span class="o">=</span><span class="s">{&#39;gpocentek&#39;: &#39;some_htpasswd_encrypted_passwd&#39;}</span>
+
+<span class="na">openshift_hosted_router_replicas</span><span class="o">=</span><span class="s">1</span>
+<span class="na">openshift_hosted_registry_replicas</span><span class="o">=</span><span class="s">1</span>
+
+<span class="na">openshift_router_selector</span><span class="o">=</span><span class="s">&#39;region=primary&#39;</span>
+<span class="na">openshift_registry_selector</span><span class="o">=</span><span class="s">&#39;region=primary&#39;</span>
+</pre></div>
+<p>Some variables require a bit of explanation:</p>
+<dl class="docutils">
+<dt>openshift_schedulable=true</dt>
+<dd>By default a master node will be configured to be ignored by the OpenShift
+scheduler. Application containers will not be created on masters. Since we
+only have one node, the master should be configured to host application
+containers.</dd>
+<dt>openshift_router_selector and openshift_registry_selector</dt>
+<dd><p class="first">Routers (which expose services to the outside world) and the docker
+registry both run as containers on one or several nodes of the OpenShift
+cluster. By default they run on infrastructure nodes: dedicated nodes
+hosting internal services. To make sure that these services are properly
+scheduled and started on the single node deployment we explicitly label the
+node (<tt class="docutils literal">region: primay</tt>) and configure the router and registry selector to
+match this node.</p>
+<p class="last">We also make sure that only 1 container is scheduled for each service
+(<tt class="docutils literal">openshift_hosted_{router,registry}_replicas</tt>).</p>
+</dd>
+<dt>openshift_master_htpasswd_users</dt>
+<dd>In this setup htpasswd authentication is used, and a <tt class="docutils literal">gpocentek</tt> user is
+created by the playbook. You can generate the encrypted password using the
+<tt class="docutils literal">htpasswd</tt> tool.</dd>
+</dl>
+<p>The node can be deployed using:</p>
+<div class="highlight"><pre><span></span><span class="gp">$</span> ansible-playbook -i inventory/hosts playbooks/byo/config.yml
+</pre></div>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">Note: you can find sample inventories in <tt class="docutils literal">inventory/byo/</tt>.</p>
+</div>
+</div>
+<div class="section" id="storage">
+<h2>Storage</h2>
+<p>One feature I couldn't manage to deploy is persistent storage support. Since
+the deployment isn't meant for production, I used a NFS server deployed on the
+OpenShift machine to provide PVs:</p>
+<div class="highlight"><pre><span></span><span class="k">for</span> i in <span class="o">{</span><span class="m">1</span>..9<span class="o">}</span><span class="p">;</span> <span class="k">do</span>
+    mkdir -p /exports/volumes/vol0<span class="nv">$i</span>
+    chown nfsnobody:nfsnobody /exports/volumes/vol0<span class="nv">$i</span>
+    chmod <span class="m">775</span> /exports/volumes/vol0<span class="nv">$i</span>
+    <span class="nb">echo</span> <span class="s2">&quot;/exports/volumes/vol0</span><span class="nv">$i</span><span class="s2"> *(rw,root_squash,no_wdelay)&quot;</span> &gt;&gt; /etc/exports
+
+    cat <span class="p">|</span> oc create -f - <span class="s">&lt;&lt; EOF</span>
+<span class="s">    apiVersion: v1</span>
+<span class="s">    kind: PersistentVolume</span>
+<span class="s">    metadata:</span>
+<span class="s">      name: pv0$i</span>
+<span class="s">    spec:</span>
+<span class="s">      capacity:</span>
+<span class="s">        storage: 5Gi</span>
+<span class="s">      accessModes:</span>
+<span class="s">        - ReadWriteOnce</span>
+<span class="s">      nfs:</span>
+<span class="s">        path: /exports/volumes/vol0$i</span>
+<span class="s">        server: 172.17.0.1</span>
+<span class="s">      persistentVolumeReclaimPolicy: Recycle</span>
+<span class="s">    EOF</span>
+<span class="k">done</span>
+</pre></div>
+<p>Containers using PVCs created using these PVs most define a custom
+<tt class="docutils literal">securityContext</tt>:</p>
+<div class="highlight"><pre><span></span><span class="l l-Scalar l-Scalar-Plain">securityContext</span><span class="p p-Indicator">:</span>
+  <span class="l l-Scalar l-Scalar-Plain">supplementalGroups</span><span class="p p-Indicator">:</span> <span class="p p-Indicator">[</span><span class="nv">65534</span><span class="p p-Indicator">]</span>
+</pre></div>
+<p>References:
+<a class="reference external" href="https://docs.openshift.org/latest/install_config/persistent_storage/persistent_storage_nfs.html#nfs-supplemental-groups">https://docs.openshift.org/latest/install_config/persistent_storage/persistent_storage_nfs.html#nfs-supplemental-groups</a></p>
+</div>
+</div>
+        </div>
+    </div>
+    <div class="span8">
+        <hr />
+    </div>
+
+<div class="span6">
+</div>
+</div>
+        </div><!--/span-->
+        <div class="span3 well sidebar-nav" id="sidebar">
+<ul class="nav nav-list">
+<li class="nav-header"><h4><i class="icon-home icon-large"></i> social</h4></li>
+    <li><a href="https://www.linkedin.com/in/gauvainpocentek"><i class="icon-linkedin-sign icon-large"></i>linkedin</a></li>
+    <li><a href="https://github.com/gpocentek"><i class="icon-github-sign icon-large"></i>github</a></li>
+
+<li class="nav-header"><h4><i class="icon-folder-close icon-large"></i>Categories</h4></li>
+<li>
+<a href="../category/ansible.html">
+    <i class="icon-folder-open icon-large"></i>ansible
+</a>
+</li>
+<li>
+<a href="../category/containers.html">
+    <i class="icon-folder-open icon-large"></i>containers
+</a>
+</li>
+<li>
+<a href="../category/lxc.html">
+    <i class="icon-folder-open icon-large"></i>lxc
+</a>
+</li>
+<li>
+<a href="../category/lxd.html">
+    <i class="icon-folder-open icon-large"></i>lxd
+</a>
+</li>
+<li>
+<a href="../category/medibuntu.html">
+    <i class="icon-folder-open icon-large"></i>medibuntu
+</a>
+</li>
+<li>
+<a href="../category/misc.html">
+    <i class="icon-folder-open icon-large"></i>misc
+</a>
+</li>
+<li>
+<a href="../category/openstack.html">
+    <i class="icon-folder-open icon-large"></i>openstack
+</a>
+</li>
+<li>
+<a href="../category/python-gitlab.html">
+    <i class="icon-folder-open icon-large"></i>python-gitlab
+</a>
+</li>
+
+<li class="nav-header"><h4><i class="icon-th-list icon-large"></i>Archives</h4></li>
+<li><a href="../archives.html"><i class="icon-edit icon-large"></i>articles</a></li>
+
+<li class="nav-header"><h4><i class="icon-inbox icon-large"></i>Contact</h4></li>
+<li><a href="mailto:gauvainpocentek@gmail.com">
+    <i class="icon-envelope icon-large"></i>email</a></li>
+</li>
+
+
+
+<li></li>
+</ul>        </div><!--/.well -->
+
+      </div><!--/row-->
+
+      <hr>
+
+    </div><!--/.fluid-container-->
+
+<script type="text/javascript">
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-77146095-1']);
+  _gaq.push(['_trackPageview']);
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+    <!-- Le javascript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="../theme/js/jquery-1.7.2.min.js"></script>
+    <script src="../theme/js/bootstrap.min.js"></script>
+  </body>
+</html>

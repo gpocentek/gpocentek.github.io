@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>OpenStack upgrade: when the L3 agent went cuckoo | gpocentek's webspace</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="keywords" content="" />
+    <meta name="author" content="Gauvain Pocentek" />
+    <meta name="kittycheck_rumble" content="true" />
+    <meta name="kittycheck_position" content="top=60,right=60" />
+
+    <!-- Le styles -->
+    <link rel="stylesheet" href="./theme/css/bootstrap.min.css" type="text/css" />
+    <style type="text/css">
+      body {
+        padding-top: 60px;
+        padding-bottom: 40px;
+      }
+      .sidebar-nav {
+        padding: 9px 0;
+      }
+      .tag-1 {
+        font-size: 13pt;
+      }
+      .tag-2 {
+        font-size: 10pt;
+      }
+      .tag-2 {
+        font-size: 8pt;
+      }
+      .tag-4 {
+        font-size: 6pt;
+     }
+    </style>
+    <link href="./theme/css/bootstrap-responsive.min.css" rel="stylesheet">
+    <link href="./theme/css/font-awesome.css" rel="stylesheet">
+    <link href="./theme/css/pygments.css" rel="stylesheet">
+    <link href="./theme/css/local.css" rel="stylesheet">
+
+    <!-- Le HTML5 shim, for IE6-8 support of HTML5 elements -->
+    <!--[if lt IE 9]>
+      <script src="//html5shim.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+
+    <!-- Le fav and touch icons -->
+    <link rel="shortcut icon" href="./theme/img/favicon.ico">
+    <link rel="apple-touch-icon" href="./theme/img/apple-touch-icon.png">
+    <link rel="apple-touch-icon" sizes="72x72" href="./theme/img/apple-touch-icon-72x72.png">
+    <link rel="apple-touch-icon" sizes="114x114" href="./theme/img/apple-touch-icon-114x114.png">
+
+    <link href="./" type="application/atom+xml" rel="alternate" title="gpocentek's webspace ATOM Feed" />
+  </head>
+  <body>
+    <div class="navbar navbar-fixed-top">
+      <div class="navbar-inner">
+        <div class="container-fluid">
+          <a class="btn btn-navbar" data-toggle="collapse" data-target=".nav-collapse">
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+          </a>
+          <a class="brand" href="./index.html"><strong>gpocentek's webspace</strong> &ndash;  Random dev & ops notes</a>
+          <div class="nav-collapse">
+            <ul class="nav">
+            </ul>
+            <!--<p class="navbar-text pull-right">Logged in as <a href="#">username</a></p>-->
+          </div><!--/.nav-collapse -->
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      <div class="row">
+        <div class="span8" id="content">
+<div class="row">
+    <div class="span8">
+<section id="content" class="well">
+    <article>
+        <header>
+            <h1>
+                <a href=""
+                        rel="bookmark"
+                        title="Permalink to OpenStack upgrade: when the L3 agent went cuckoo">
+                        OpenStack upgrade: when the L3 agent went cuckoo
+                </a>
+            </h1>
+<a href="./tag/neutron.html" class="label"><i class="icon-tag"></i>&nbsp;neutron</a>
+<a href="./tag/rootwrap.html" class="label"><i class="icon-tag"></i>&nbsp;rootwrap</a>
+<a href="./tag/upgrade.html" class="label"><i class="icon-tag"></i>&nbsp;upgrade</a>
+            <abbr class="published pull-right" title="2017-04-22T08:54:00+02:00">
+                <i class="icon-calendar"></i>&nbsp;lör 22 april 2017
+            </abbr>
+        </header>
+        <div class="entry-content">
+
+        <div class="section" id="the-context">
+<h2>The context</h2>
+<p>This week we upgraded an OpenStack platform from Liberty to Mitaka for a
+customer. Small platform, no need to keep the APIs up, no big deal.</p>
+<p>The platform has 3 controller/network nodes, and 3 computes. The neutron
+configuration is quite common: Open vSwitch ML2 mechanism, self-service
+networks, virtual routers and floating IPs, L3 HA.</p>
+<p>At  <a class="reference external" href="https://www.objectif-libre.com/">Objectif Libre</a> we use a home-grown
+ansible playbook to deploy and upgrade OpenStack platforms, and everything went
+fine. Well, almost.</p>
+</div>
+<div class="section" id="the-problem">
+<h2>The problem</h2>
+<p>After the L3 agent upgrade and restart the routers were still doing their job,
+but adding new interfaces to them didn't work. We checked the logs. The agent
+was logging a <strong>lot</strong> of python traces, such as this one:</p>
+<div class="highlight"><pre><span></span>2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent [-] Failed to process compatible router &#39;8a776bc6-b2e3-4439-b122-45ce7479b0a8&#39;
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent Traceback (most recent call last):
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &quot;/usr/lib/python2.7/site-packages/neutron/agent/l3/agent.py&quot;, line 501, in _process_router_update
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     self._process_router_if_compatible(router)
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &quot;/usr/lib/python2.7/site-packages/neutron/agent/l3/agent.py&quot;, line 440, in _process_router_if_compatible
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     self._process_updated_router(router)
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &quot;/usr/lib/python2.7/site-packages/neutron/agent/l3/agent.py&quot;, line 454, in _process_updated_router
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     ri.process(self)
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &quot;/usr/lib/python2.7/site-packages/neutron/agent/l3/ha_router.py&quot;, line 389, in process
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     self.enable_keepalived()
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &quot;/usr/lib/python2.7/site-packages/neutron/agent/l3/ha_router.py&quot;, line 123, in enable_keepalived
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     self.keepalived_manager.spawn()
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &quot;/usr/lib/python2.7/site-packages/neutron/agent/linux/keepalived.py&quot;, line 401, in spawn
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     keepalived_pm.enable(reload_cfg=True)
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &quot;/usr/lib/python2.7/site-packages/neutron/agent/linux/external_process.py&quot;, line 94, in enable
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     self.reload_cfg()
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &quot;/usr/lib/python2.7/site-packages/neutron/agent/linux/external_process.py&quot;, line 97, in reload_cfg
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     self.disable(&#39;HUP&#39;)
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &quot;/usr/lib/python2.7/site-packages/neutron/agent/linux/external_process.py&quot;, line 109, in disable
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     utils.execute(cmd, run_as_root=True)
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &quot;/usr/lib/python2.7/site-packages/neutron/agent/linux/utils.py&quot;, line 116, in execute
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     execute_rootwrap_daemon(cmd, process_input, addl_env))
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &quot;/usr/lib/python2.7/site-packages/neutron/agent/linux/utils.py&quot;, line 102, in execute_rootwrap_daemon
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     return client.execute(cmd, process_input)
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &quot;/usr/lib/python2.7/site-packages/oslo_rootwrap/client.py&quot;, line 128, in execute
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     try:
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &quot;&lt;string&gt;&quot;, line 2, in run_one_command
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent   File &quot;/usr/lib64/python2.7/multiprocessing/managers.py&quot;, line 773, in _callmethod
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent     raise convert_to_error(kind, result)
+2017-04-20 14:54:50.371 29021 ERROR neutron.agent.l3.agent NoFilterMatched
+</pre></div>
+<p>The trace shows that a problem occured in <tt class="docutils literal">oslo_rootwrap</tt>, leading to a
+<tt class="docutils literal">NoFilterMatched</tt> exception. <tt class="docutils literal">oslo.rootwrap</tt> is the library that allows
+unprivileged applications such as <tt class="docutils literal"><span class="pre">neutron-l3-agent</span></tt> to execute system
+commands as <tt class="docutils literal">root</tt>.  It is based on  <tt class="docutils literal">sudo</tt> and provides its own
+authorization mechanism.</p>
+<p>The <tt class="docutils literal">NoFilterMatched</tt> exception is raised by <tt class="docutils literal">oslo_rootwrap</tt> when the
+requested command doesn't match any of those defined in the configuration. This
+is great, but which command?</p>
+<p>Activating the debug in the L3 agent didn't help, the problematic command
+still didn't show in the logs.</p>
+<p>So we patched oslo to make it a bit more verbose. We modified
+<tt class="docutils literal"><span class="pre">/usr/lib/python2.7/site-packages/oslo_rootwrap/client.py</span></tt>:</p>
+<div class="highlight"><pre><span></span><span class="gd">--- client.py.orig   2017-04-22 08:19:16.463450594 +0200</span>
+<span class="gi">+++ client.py        2017-04-22 08:21:51.590386941 +0200</span>
+<span class="gu">@@ -121,6 +121,7 @@</span>
+             return self._proxy
+
+     def execute(self, cmd, stdin=None):
+<span class="gi">+        LOG.info(&#39;CMD: %s&#39; % cmd)</span>
+         self._ensure_initialized()
+         proxy = self._proxy
+         retry = False
+</pre></div>
+<p>After the L3 agent restart the logs became a bit more interesting:</p>
+<div class="highlight"><pre><span></span>2017-04-20 14:57:28.602 10262 INFO oslo_rootwrap.client [req-f6dc5751-96e3-41b8-86bc-f7f98ff26f12 - 3ce2f82bc46b429285ba0e17840e6cf7 - - -] CMD: [&#39;kill&#39;, &#39;-HUP&#39;, &#39;14410&#39;]
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent [req-f6dc5751-96e3-41b8-86bc-f7f98ff26f12 - 3ce2f82bc46b429285ba0e17840e6cf7 - - -] Failed to process compatible router &#39;eb356f30-98c9-4641-9f99-2ad91a6a7223&#39;
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent Traceback (most recent call last):
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent   File &quot;/usr/lib/python2.7/site-packages/neutron/agent/l3/agent.py&quot;, line 501, in _process_router_update
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent     self._process_router_if_compatible(router)
+[...]
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent   File &quot;/usr/lib/python2.7/site-packages/oslo_rootwrap/client.py&quot;, line 129, in execute
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent     res = proxy.run_one_command(cmd, stdin)
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent   File &quot;&lt;string&gt;&quot;, line 2, in run_one_command
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent   File &quot;/usr/lib64/python2.7/multiprocessing/managers.py&quot;, line 773, in _callmethod
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent     raise convert_to_error(kind, result)
+2017-04-20 14:57:28.604 10262 ERROR neutron.agent.l3.agent NoFilterMatched
+</pre></div>
+<p>The L3 agent was trying to send a signal to a process with PID 14410. <tt class="docutils literal">ps</tt>
+told us more about it:</p>
+<div class="highlight"><pre><span></span>root     14410  0.0  0.0 111640  1324 ?        Ss   mars01   3:28 keepalived -P [...]
+</pre></div>
+<p><tt class="docutils literal">keepalived</tt> is used by the L3 agent for the router HA feature. For each
+router a VRRP/keepalived process is started to handle the failover in case a
+node goes down.</p>
+<p>So neutron was not authorized to send signals to this process.</p>
+</div>
+<div class="section" id="the-solution">
+<h2>The solution</h2>
+<p>Knowing that the problem was related to a missing authorization in the
+<tt class="docutils literal">oslo_rootwrap</tt> configuration we did a bit of digging in the configuration
+files:</p>
+<div class="highlight"><pre><span></span><span class="gp">$</span> grep keepalived /usr/share/neutron/rootwrap/*.filters
+<span class="go">/usr/share/neutron/rootwrap/l3.filters:keepalived: CommandFilter, keepalived, root</span>
+<span class="go">/usr/share/neutron/rootwrap/l3.filters:kill_keepalived: KillFilter, root, /usr/sbin/keepalived, -HUP, -15, -9</span>
+</pre></div>
+<p>The configuration allowed neutron to send signals to <tt class="docutils literal">/usr/sbin/keepalived</tt>
+processes, but our process was called <tt class="docutils literal">keepalived</tt>, without absolute path. So
+we added a new configuration do deal with the existing processes:</p>
+<div class="highlight"><pre><span></span>kill_keepalived_no_path: KillFilter, root, keepalived, -HUP, -15, -9
+</pre></div>
+<p>After a restart the L3 agent started to act as expected again.</p>
+</div>
+<div class="section" id="conclusion">
+<h2>Conclusion</h2>
+<p>Mitaka is a somewhat old realease in OpenStack terms, and we didn't face this
+problem during upgrades to more recent OpenStack versions.</p>
+<p>Knowing how to read python traces and how to dig into OpenStack code is still
+an interesting skill to possess to be able to understand situations like this
+one (google didn't help much).</p>
+<p><tt class="docutils literal">rootwrap</tt> usually does its job quite well and this problem gave us the
+opportunity to better understand how it works and how to deal with its
+configuration.</p>
+</div>
+
+        </div><!-- /.entry-content -->
+        <div class="comments">
+        <h2>Comments !</h2>
+            <div id="disqus_thread"></div>
+            <script type="text/javascript">
+               var disqus_identifier = "neutron-upgrade-rootwrap.html";
+               (function() {
+                    var dsq = document.createElement('script');
+                    dsq.type = 'text/javascript'; dsq.async = true;
+                    dsq.src = 'https://gauvainpocenteknet.disqus.com/embed.js';
+                    (document.getElementsByTagName('head')[0] ||
+                     document.getElementsByTagName('body')[0]).appendChild(dsq);
+              })();
+            </script>
+        </div>
+    </article>
+</section>
+</div>
+</div>
+        </div><!--/span-->
+        <div class="span3 well sidebar-nav" id="sidebar">
+<ul class="nav nav-list">
+<li class="nav-header"><h4><i class="icon-home icon-large"></i> social</h4></li>
+    <li><a href="https://www.linkedin.com/in/gauvainpocentek"><i class="icon-linkedin-sign icon-large"></i>linkedin</a></li>
+    <li><a href="https://github.com/gpocentek"><i class="icon-github-sign icon-large"></i>github</a></li>
+
+<li class="nav-header"><h4><i class="icon-folder-close icon-large"></i>Categories</h4></li>
+<li>
+<a href="./category/ansible.html">
+    <i class="icon-folder-open icon-large"></i>ansible
+</a>
+</li>
+<li>
+<a href="./category/containers.html">
+    <i class="icon-folder-open icon-large"></i>containers
+</a>
+</li>
+<li>
+<a href="./category/lxc.html">
+    <i class="icon-folder-open icon-large"></i>lxc
+</a>
+</li>
+<li>
+<a href="./category/lxd.html">
+    <i class="icon-folder-open icon-large"></i>lxd
+</a>
+</li>
+<li>
+<a href="./category/medibuntu.html">
+    <i class="icon-folder-open icon-large"></i>medibuntu
+</a>
+</li>
+<li>
+<a href="./category/misc.html">
+    <i class="icon-folder-open icon-large"></i>misc
+</a>
+</li>
+<li>
+<a href="./category/openstack.html">
+    <i class="icon-folder-open icon-large"></i>openstack
+</a>
+</li>
+<li>
+<a href="./category/python-gitlab.html">
+    <i class="icon-folder-open icon-large"></i>python-gitlab
+</a>
+</li>
+
+<li class="nav-header"><h4><i class="icon-th-list icon-large"></i>Archives</h4></li>
+<li><a href="./archives.html"><i class="icon-edit icon-large"></i>articles</a></li>
+
+<li class="nav-header"><h4><i class="icon-inbox icon-large"></i>Contact</h4></li>
+<li><a href="mailto:gauvainpocentek@gmail.com">
+    <i class="icon-envelope icon-large"></i>email</a></li>
+</li>
+
+
+
+<li></li>
+</ul>        </div><!--/.well -->
+
+      </div><!--/row-->
+
+      <hr>
+
+    </div><!--/.fluid-container-->
+
+<script type="text/javascript">
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-77146095-1']);
+  _gaq.push(['_trackPageview']);
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+    <!-- Le javascript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="./theme/js/jquery-1.7.2.min.js"></script>
+    <script src="./theme/js/bootstrap.min.js"></script>
+  </body>
+</html>

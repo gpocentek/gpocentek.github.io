@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>gpocentek's webspace - medibuntu | gpocentek's webspace</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="keywords" content="" />
+    <meta name="author" content="Gauvain Pocentek" />
+    <meta name="kittycheck_rumble" content="true" />
+    <meta name="kittycheck_position" content="top=60,right=60" />
+
+    <!-- Le styles -->
+    <link rel="stylesheet" href="../theme/css/bootstrap.min.css" type="text/css" />
+    <style type="text/css">
+      body {
+        padding-top: 60px;
+        padding-bottom: 40px;
+      }
+      .sidebar-nav {
+        padding: 9px 0;
+      }
+      .tag-1 {
+        font-size: 13pt;
+      }
+      .tag-2 {
+        font-size: 10pt;
+      }
+      .tag-2 {
+        font-size: 8pt;
+      }
+      .tag-4 {
+        font-size: 6pt;
+     }
+    </style>
+    <link href="../theme/css/bootstrap-responsive.min.css" rel="stylesheet">
+    <link href="../theme/css/font-awesome.css" rel="stylesheet">
+    <link href="../theme/css/pygments.css" rel="stylesheet">
+    <link href="../theme/css/local.css" rel="stylesheet">
+
+    <!-- Le HTML5 shim, for IE6-8 support of HTML5 elements -->
+    <!--[if lt IE 9]>
+      <script src="//html5shim.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+
+    <!-- Le fav and touch icons -->
+    <link rel="shortcut icon" href="../theme/img/favicon.ico">
+    <link rel="apple-touch-icon" href="../theme/img/apple-touch-icon.png">
+    <link rel="apple-touch-icon" sizes="72x72" href="../theme/img/apple-touch-icon-72x72.png">
+    <link rel="apple-touch-icon" sizes="114x114" href="../theme/img/apple-touch-icon-114x114.png">
+
+    <link href="../" type="application/atom+xml" rel="alternate" title="gpocentek's webspace ATOM Feed" />
+  </head>
+  <body>
+    <div class="navbar navbar-fixed-top">
+      <div class="navbar-inner">
+        <div class="container-fluid">
+          <a class="btn btn-navbar" data-toggle="collapse" data-target=".nav-collapse">
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+          </a>
+          <a class="brand" href="../index.html"><strong>gpocentek's webspace</strong> &ndash;  Random dev & ops notes</a>
+          <div class="nav-collapse">
+            <ul class="nav">
+            </ul>
+            <!--<p class="navbar-text pull-right">Logged in as <a href="#">username</a></p>-->
+          </div><!--/.nav-collapse -->
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      <div class="row">
+        <div class="span8" id="content">
+<div class="row">
+    <div class="span8">
+        <div class="article well">
+            <article>
+                <header>
+                    <h1><a href="../end-of-medibuntu.html">The end of Medibuntu</a></h1>
+<a href="../tag/medibuntu.html" class="label"><i class="icon-tag"></i>&nbsp;medibuntu</a>
+<a href="../tag/vlc.html" class="label"><i class="icon-tag"></i>&nbsp;vlc</a>
+                    <abbr class="published pull-right" title="2013-09-11T16:21:00+02:00">
+                        <i class="icon-calendar"></i>&nbsp;ons 11 september 2013
+                    </abbr>
+                </header>
+            </article>
+            <div class="summary"><p>Medibuntu is going down.</p>
+<p>The project is not really needed nowadays, except for one package: libdvdcss.
+This package is now maintained by Jonathan Riddell at <a class="reference external" href="http://www.blue-systems.de/">Blue Systems</a>. It is available in a <a class="reference external" href="ftp://ftp.videolan.org/pub/debian">repository hosted by
+VideoLAN</a>.</p>
+<p>To disable the Medibuntu repository and enable the libdvdcss one, use these
+commands:</p>
+<div class="highlight"><pre><span></span><span class="go">sudo rm /etc/apt/sources.list.d/medibuntu.list</span>
+<span class="go">curl ftp://ftp.videolan.org/pub/debian/videolan-apt.asc | sudo apt-key add -</span>
+<span class="go">echo &quot;deb ftp://ftp.videolan.org/pub/debian/stable ./&quot; | sudo tee /etc/apt/sources.list.d/libdvdcss.list</span>
+<span class="go">sudo apt-get update</span>
+</pre></div>
+<p>If you are using Ubuntu saucy, you can also install libdvdcss using <a class="reference external" href="https://help.ubuntu.com/community/RestrictedFormats#Addlibdvdccs">an
+alternative method</a> (make sure
+to install/upgrade the <tt class="docutils literal">libdvdread4</tt> package first).</p>
+<p>I'll keep the repository online for now, at least until the Ubuntu 13.10
+release. Expect the repository to be down after that. An iso image of the
+current state of the repository <cite>is available
+&lt;http://archive.pocentek.net/medibuntu/&gt;</cite>.</p>
+<p>I recommend to disable the repository if you are currently using it.</p>
+<p>Thanks to all the persons who contributed to the project (package maintainers,
+servers admins, ...).</p>
+</div>
+        </div>
+    </div>
+    <div class="span8">
+        <hr />
+    </div>
+
+<div class="span6">
+</div>
+</div>
+        </div><!--/span-->
+        <div class="span3 well sidebar-nav" id="sidebar">
+<ul class="nav nav-list">
+<li class="nav-header"><h4><i class="icon-home icon-large"></i> social</h4></li>
+    <li><a href="https://www.linkedin.com/in/gauvainpocentek"><i class="icon-linkedin-sign icon-large"></i>linkedin</a></li>
+    <li><a href="https://github.com/gpocentek"><i class="icon-github-sign icon-large"></i>github</a></li>
+
+<li class="nav-header"><h4><i class="icon-folder-close icon-large"></i>Categories</h4></li>
+<li>
+<a href="../category/ansible.html">
+    <i class="icon-folder-open icon-large"></i>ansible
+</a>
+</li>
+<li>
+<a href="../category/containers.html">
+    <i class="icon-folder-open icon-large"></i>containers
+</a>
+</li>
+<li>
+<a href="../category/lxc.html">
+    <i class="icon-folder-open icon-large"></i>lxc
+</a>
+</li>
+<li>
+<a href="../category/lxd.html">
+    <i class="icon-folder-open icon-large"></i>lxd
+</a>
+</li>
+<li>
+<a href="../category/medibuntu.html">
+    <i class="icon-folder-open icon-large"></i>medibuntu
+</a>
+</li>
+<li>
+<a href="../category/misc.html">
+    <i class="icon-folder-open icon-large"></i>misc
+</a>
+</li>
+<li>
+<a href="../category/openstack.html">
+    <i class="icon-folder-open icon-large"></i>openstack
+</a>
+</li>
+<li>
+<a href="../category/python-gitlab.html">
+    <i class="icon-folder-open icon-large"></i>python-gitlab
+</a>
+</li>
+
+<li class="nav-header"><h4><i class="icon-th-list icon-large"></i>Archives</h4></li>
+<li><a href="../archives.html"><i class="icon-edit icon-large"></i>articles</a></li>
+
+<li class="nav-header"><h4><i class="icon-inbox icon-large"></i>Contact</h4></li>
+<li><a href="mailto:gauvainpocentek@gmail.com">
+    <i class="icon-envelope icon-large"></i>email</a></li>
+</li>
+
+
+
+<li></li>
+</ul>        </div><!--/.well -->
+
+      </div><!--/row-->
+
+      <hr>
+
+    </div><!--/.fluid-container-->
+
+<script type="text/javascript">
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-77146095-1']);
+  _gaq.push(['_trackPageview']);
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+    <!-- Le javascript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="../theme/js/jquery-1.7.2.min.js"></script>
+    <script src="../theme/js/bootstrap.min.js"></script>
+  </body>
+</html>

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: http://gauvain.pocentek.net/sitemap.xml

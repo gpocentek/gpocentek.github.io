@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Delegate OpenLDAP authentication to AD on CentOS | gpocentek's webspace</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="keywords" content="" />
+    <meta name="author" content="Gauvain Pocentek" />
+    <meta name="kittycheck_rumble" content="true" />
+    <meta name="kittycheck_position" content="top=60,right=60" />
+
+    <!-- Le styles -->
+    <link rel="stylesheet" href="../../theme/css/bootstrap.min.css" type="text/css" />
+    <style type="text/css">
+      body {
+        padding-top: 60px;
+        padding-bottom: 40px;
+      }
+      .sidebar-nav {
+        padding: 9px 0;
+      }
+      .tag-1 {
+        font-size: 13pt;
+      }
+      .tag-2 {
+        font-size: 10pt;
+      }
+      .tag-2 {
+        font-size: 8pt;
+      }
+      .tag-4 {
+        font-size: 6pt;
+     }
+    </style>
+    <link href="../../theme/css/bootstrap-responsive.min.css" rel="stylesheet">
+    <link href="../../theme/css/font-awesome.css" rel="stylesheet">
+    <link href="../../theme/css/pygments.css" rel="stylesheet">
+    <link href="../../theme/css/local.css" rel="stylesheet">
+
+    <!-- Le HTML5 shim, for IE6-8 support of HTML5 elements -->
+    <!--[if lt IE 9]>
+      <script src="//html5shim.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+
+    <!-- Le fav and touch icons -->
+    <link rel="shortcut icon" href="../../theme/img/favicon.ico">
+    <link rel="apple-touch-icon" href="../../theme/img/apple-touch-icon.png">
+    <link rel="apple-touch-icon" sizes="72x72" href="../../theme/img/apple-touch-icon-72x72.png">
+    <link rel="apple-touch-icon" sizes="114x114" href="../../theme/img/apple-touch-icon-114x114.png">
+
+    <link href="../../" type="application/atom+xml" rel="alternate" title="gpocentek's webspace ATOM Feed" />
+  </head>
+  <body>
+    <div class="navbar navbar-fixed-top">
+      <div class="navbar-inner">
+        <div class="container-fluid">
+          <a class="btn btn-navbar" data-toggle="collapse" data-target=".nav-collapse">
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+          </a>
+          <a class="brand" href="../../index.html"><strong>gpocentek's webspace</strong> &ndash;  Random dev & ops notes</a>
+          <div class="nav-collapse">
+            <ul class="nav">
+            </ul>
+            <!--<p class="navbar-text pull-right">Logged in as <a href="#">username</a></p>-->
+          </div><!--/.nav-collapse -->
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      <div class="row">
+        <div class="span8" id="content">
+<section id="content" class="body well">
+    <h1 class="entry-title">Delegate OpenLDAP authentication to AD on CentOS</h1>
+    <div class="section" id="goal-and-mechanisms">
+<h2>Goal and mechanisms</h2>
+<p>The goal is to use OpenLDAP for Unix users, but without managing a password
+synchronization between this LDAP server and an Active Directory server.</p>
+<p>The idea is to ask OpenLDAP to delegate authentication using the SASL protocol.
+The SASL daemon performs the authentication on the AD server using the LDAP
+protocol.</p>
+<p>This documentation assumes that you already know about configuring OpenLDAP and
+Active Directory.</p>
+</div>
+<div class="section" id="configuration-of-the-server">
+<h2>Configuration of the server</h2>
+<p>In this example :</p>
+<ul class="simple">
+<li>AD side:<ul>
+<li>server name: ad.pocentek.net</li>
+<li>domain (realm): pocentek.net</li>
+<li>auth user: sasl</li>
+<li>actual user: ad_user</li>
+</ul>
+</li>
+<li>OpenLDAP side:<ul>
+<li>suffix: dc=pocentek,dc=net</li>
+<li>user: uid=ldap_user,ou=People,dc=pocentek,dc=net</li>
+</ul>
+</li>
+</ul>
+<div class="section" id="saslauthd-setup">
+<h3>Saslauthd setup</h3>
+<ol class="arabic">
+<li><p class="first">Install the cyrus SASL daemon and its LDAP plugin:</p>
+<div class="highlight"><pre><span></span><span class="gp">#</span> yum install cyrus-sasl cyrus-sasl-ldap
+</pre></div>
+</li>
+<li><p class="first">Edit the <tt class="docutils literal">/etc/sysconfig/saslauthd</tt> file to enable LDAP mechanism and add
+the <tt class="docutils literal"><span class="pre">-r</span></tt> switch to the daemon:</p>
+<div class="highlight"><pre><span></span><span class="nv">SOCKETDIR</span><span class="o">=</span>/var/run/saslauthd
+<span class="nv">MECH</span><span class="o">=</span>ldap
+<span class="nv">FLAGS</span><span class="o">=</span><span class="s2">&quot;-r&quot;</span>
+</pre></div>
+</li>
+<li><p class="first">Define the LDAP access parameters in <tt class="docutils literal">/etc/saslauthd.conf</tt>:</p>
+<div class="highlight"><pre><span></span>ldap_servers: ldap://ad.pocentek.net
+ldap_search_base: dc=pocentek,dc=net
+ldap_filter: (userPrincipalName=%u)
+ldap_bind_dn: cn=sasl,cn=users,dc=pocentek,dc=net
+ldap_password: secret
+</pre></div>
+</li>
+<li><p class="first">Start the daemon:</p>
+<div class="highlight"><pre><span></span><span class="gp">#</span> chkconfig saslauthd on
+<span class="gp">#</span> service saslauthd start
+</pre></div>
+</li>
+</ol>
+</div>
+<div class="section" id="saslauthd-test">
+<h3>Saslauthd test</h3>
+<p>Test the AD user authentication with a correct and an erroneous password:</p>
+<div class="highlight"><pre><span></span><span class="gp">$</span> testsaslauthd -u ad_user@pocentek.net -p real_password
+<span class="gp">$</span> testsaslauthd -u ad_user@pocentek.net -p wrong_password
+</pre></div>
+</div>
+<div class="section" id="openldap-setup">
+<h3>OpenLDAP setup</h3>
+<ol class="arabic">
+<li><p class="first">Update the <tt class="docutils literal">/usr/lib64/sasl2/slapd.conf</tt> file to instruct OpenLDAP how to
+connect to the SASL daemon:</p>
+<!-- code-block: none
+
+mech_list: plain
+pwcheck_method: saslauthd
+saslauthd_path: /var/run/saslauthd/mux -->
+</li>
+<li><p class="first">Restart the LDAP server</p>
+</li>
+<li><p class="first">Modify the LDAP <tt class="docutils literal">userPassword</tt> attribute for the user to:</p>
+<div class="highlight"><pre><span></span>userPassword: {SASL}ad_user@pocentek.net
+</pre></div>
+</li>
+</ol>
+<p>Use <tt class="docutils literal">ldapwhoami</tt> to validate the correct behavior:</p>
+<div class="highlight"><pre><span></span>ldapwhoami -x -D &quot;uid=ldap_user,ou=People,dc=pocentek,dc=net&quot; -w ad_password
+</pre></div>
+</div>
+</div>
+<div class="section" id="references">
+<h2>References</h2>
+<ul class="simple">
+<li><a class="reference external" href="http://www.openldap.org/doc/admin24/security.html#Pass-Through%20authentication">http://www.openldap.org/doc/admin24/security.html#Pass-Through%20authentication</a></li>
+</ul>
+</div>
+
+</section>
+        </div><!--/span-->
+        <div class="span3 well sidebar-nav" id="sidebar">
+<ul class="nav nav-list">
+<li class="nav-header"><h4><i class="icon-home icon-large"></i> social</h4></li>
+    <li><a href="https://www.linkedin.com/in/gauvainpocentek"><i class="icon-linkedin-sign icon-large"></i>linkedin</a></li>
+    <li><a href="https://github.com/gpocentek"><i class="icon-github-sign icon-large"></i>github</a></li>
+
+<li class="nav-header"><h4><i class="icon-folder-close icon-large"></i>Categories</h4></li>
+<li>
+<a href="../../category/ansible.html">
+    <i class="icon-folder-open icon-large"></i>ansible
+</a>
+</li>
+<li>
+<a href="../../category/containers.html">
+    <i class="icon-folder-open icon-large"></i>containers
+</a>
+</li>
+<li>
+<a href="../../category/lxc.html">
+    <i class="icon-folder-open icon-large"></i>lxc
+</a>
+</li>
+<li>
+<a href="../../category/lxd.html">
+    <i class="icon-folder-open icon-large"></i>lxd
+</a>
+</li>
+<li>
+<a href="../../category/medibuntu.html">
+    <i class="icon-folder-open icon-large"></i>medibuntu
+</a>
+</li>
+<li>
+<a href="../../category/misc.html">
+    <i class="icon-folder-open icon-large"></i>misc
+</a>
+</li>
+<li>
+<a href="../../category/openstack.html">
+    <i class="icon-folder-open icon-large"></i>openstack
+</a>
+</li>
+<li>
+<a href="../../category/python-gitlab.html">
+    <i class="icon-folder-open icon-large"></i>python-gitlab
+</a>
+</li>
+
+<li class="nav-header"><h4><i class="icon-th-list icon-large"></i>Archives</h4></li>
+<li><a href="../../archives.html"><i class="icon-edit icon-large"></i>articles</a></li>
+
+<li class="nav-header"><h4><i class="icon-inbox icon-large"></i>Contact</h4></li>
+<li><a href="mailto:gauvainpocentek@gmail.com">
+    <i class="icon-envelope icon-large"></i>email</a></li>
+</li>
+
+
+
+<li></li>
+</ul>        </div><!--/.well -->
+
+      </div><!--/row-->
+
+      <hr>
+
+    </div><!--/.fluid-container-->
+
+<script type="text/javascript">
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-77146095-1']);
+  _gaq.push(['_trackPageview']);
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+    <!-- Le javascript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="../../theme/js/jquery-1.7.2.min.js"></script>
+    <script src="../../theme/js/bootstrap.min.js"></script>
+  </body>
+</html>
